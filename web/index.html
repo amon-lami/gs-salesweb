@@ -4638,13 +4638,207 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       if(error)throw error;
 
       setSaveErr("");
-      alert(`${mode==="quotation"?"見積書":"請求書"}を保存しました: ${docNumber}`);
+      // Auto-download Excel after save
+      try{await generateExcel()}catch(ex){console.error("Excel generation failed:",ex)}
       onBack?.();
     }catch(e){
       setSaveErr(e.message);
     }finally{
       setSaving(false);
     }
+  };
+
+  // ── Excel Export (matching exact template layout) ──
+  const generateExcel=async()=>{
+    // Load SheetJS if not loaded
+    if(!window.XLSX){
+      const s=document.createElement("script");
+      s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      document.head.appendChild(s);
+      await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(new Error("SheetJS読み込み失敗"))});
+    }
+    const XLSX=window.XLSX;
+    const wb=XLSX.utils.book_new();
+    const ws={};
+
+    // Helper: set cell with style info (stored as comments for xlsx-style)
+    const setCell=(ref,val,opts={})=>{
+      const cell={v:val,t:typeof val==="number"?"n":"s"};
+      if(opts.formula){cell.f=opts.formula;delete cell.v;cell.t="n"}
+      ws[ref]=cell;
+    };
+
+    // Date formatting helper
+    const fmtDate=(dateStr)=>{
+      const d=new Date(dateStr);
+      const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const day=d.getDate();
+      const suffix=day===1||day===21||day===31?"st":day===2||day===22?"nd":day===3||day===23?"rd":"th";
+      return `${day}${suffix}, ${months[d.getMonth()]}, ${d.getFullYear()}`;
+    };
+
+    const isInvoice=mode==="invoice";
+    const title=isInvoice?"I N V O I C E":"Q U O T A T I O N";
+    const dueLine=isInvoice?`Payment Due By: ${fmtDate(dueDate)}`:`Quote Valid Until: ${fmtDate(dueDate)}`;
+    const docLabel=isInvoice?"Invoice Number:":"Quotation Number:";
+    const toLabel=isInvoice?"B I L L  T O":"S H I P  T O";
+
+    // FROM info (Global Stride)
+    const fromCompany="Global Stride Inc.";
+    const fromAddr1="6A 4-5-11 Ueshio Tennoji-ku,";
+    const fromAddr2="Osaka-shi, Osaka-fu 543-0002";
+    const fromCountry="Japan";
+    const fromPhone="+81 50-1808-6320";
+
+    // TO info (from clientInfo)
+    const toCompany=clientInfo.companyName||"";
+    const toAddr=clientInfo.address||"";
+    const toCityCountry=[clientInfo.city,clientInfo.country].filter(Boolean).join(" ");
+    const toPhone=clientInfo.phone||"";
+
+    // Row 1: Title + Date
+    setCell("A1",title);
+    setCell("F1",`Date: ${fmtDate(docDate)}`);
+
+    // Row 2-3: Due date + Doc number
+    setCell("F2",dueLine);
+    setCell("F3",`${docLabel} ${docNumber}`);
+
+    // Row 6: FROM / SHIP TO labels
+    setCell("A6","F R O M");
+    setCell("E6",toLabel);
+
+    // Row 7-11: Company info
+    setCell("A7",`Company Name: ${fromCompany}`);
+    setCell("E7",`Company Name: ${toCompany}`);
+    setCell("A8",`Street Address: ${fromAddr1}`);
+    setCell("E8",`Street Address: ${toAddr}`);
+    setCell("A9",`                    ${fromAddr2}`);
+    setCell("E9",`                    ${toCityCountry}`);
+    setCell("A10",`                    ${fromCountry}`);
+    if(toPhone)setCell("E10",`Phone: ${toPhone}`);
+    setCell("A11",`Phone: ${fromPhone}`);
+
+    // Row 13: Table header
+    const headerRow=13;
+    setCell(`A${headerRow}`,"Description");
+    setCell(`D${headerRow}`,"JAN");
+    setCell(`E${headerRow}`,"Quantity");
+    setCell(`F${headerRow}`,"Unit Price");
+    setCell(`H${headerRow}`,"Amount");
+
+    // Rows 14+: Items
+    const dataStartRow=14;
+    docItems.forEach((item,i)=>{
+      const r=dataStartRow+i;
+      setCell(`A${r}`,item.name_en||item.name_ja||"");
+      setCell(`D${r}`,item.jan||"");
+      setCell(`E${r}`,item.quantity);
+      setCell(`F${r}`,item.selling_price);
+      setCell(`H${r}`,null,{formula:`E${r}*F${r}`});
+    });
+
+    const lastItemRow=dataStartRow+docItems.length-1;
+    const gapRow=lastItemRow+2;
+
+    // Sub Total
+    setCell(`D${gapRow}`,"Sub Total");
+    setCell(`G${gapRow}`,null,{formula:`SUM(H${dataStartRow}:H${lastItemRow})`});
+
+    // Shipping Cost
+    setCell(`D${gapRow+1}`,"Shipping Cost");
+    setCell(`G${gapRow+1}`,shippingCost);
+
+    // Total Amount
+    setCell(`D${gapRow+2}`,"Total Amount");
+    setCell(`G${gapRow+2}`,null,{formula:`G${gapRow}+G${gapRow+1}`});
+
+    let currentRow=gapRow+4;
+
+    // Bank details (Invoice only)
+    if(isInvoice){
+      const bankInfo=bankDetails||{};
+      setCell(`A${currentRow}`,`Bank Name: ${bankInfo.bank_name||"Wise"}`);
+      setCell(`A${currentRow+1}`,`Account Holder's Name: ${bankInfo.account_holder||fromCompany}`);
+      setCell(`A${currentRow+2}`,`Bank Account Number: ${bankInfo.account_number||""}`);
+      setCell(`A${currentRow+3}`,`Routing Number: ${bankInfo.routing_number||bankInfo.swift_code||""}`);
+      setCell(`A${currentRow+4}`,`Bank Address: ${bankInfo.bank_address||""}`);
+      currentRow+=6;
+    }
+
+    // Delivery Terms
+    const incoLabels={DAP:"DAP (Delivered At Place)",FOB:"FOB (Free On Board)",CIF:"CIF (Cost Insurance Freight)",EXW:"EXW (Ex Works)",DDP:"DDP (Delivered Duty Paid)"};
+    const incoDesc={
+      DAP:"The seller (Global Stride Inc.) will arrange and pay for transportation to the buyer's specified address. However, any import duties, taxes, and customs clearance procedures that occur upon importation are the responsibility of the buyer.",
+      FOB:"The seller (Global Stride Inc.) is responsible for delivering the goods to the port of shipment and loading them onto the vessel. Risk transfers to the buyer once the goods are on board.",
+      CIF:"The seller (Global Stride Inc.) pays for cost, insurance, and freight to bring goods to the port of destination. Risk transfers to the buyer once the goods are on board at the port of shipment.",
+      EXW:"The buyer is responsible for all transportation costs and risks from the seller's premises.",
+      DDP:"The seller (Global Stride Inc.) is responsible for delivering the goods to the buyer's premises, including all import duties, taxes, and customs clearance."
+    };
+    setCell(`A${currentRow}`,`Delivery Terms: ${incoLabels[incoterm]||incoterm}`);
+    setCell(`A${currentRow+1}`,incoDesc[incoterm]||"");
+    currentRow+=3;
+
+    // Remarks
+    setCell(`A${currentRow}`,"Remarks");
+    setCell(`A${currentRow+1}`,notes||"");
+
+    // Set sheet range
+    const maxRow=currentRow+1;
+    ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxRow-1,c:7}});
+
+    // Column widths (matching template)
+    ws["!cols"]=[{wch:5},{wch:22},{wch:18},{wch:14},{wch:16},{wch:12},{wch:14},{wch:12}];
+
+    // Merged cells (dynamic based on item count)
+    ws["!merges"]=[
+      // Title
+      {s:{r:0,c:0},e:{r:0,c:2}},  // A1:C1
+      {s:{r:0,c:5},e:{r:0,c:7}},  // F1:H1
+      {s:{r:1,c:5},e:{r:1,c:7}},  // F2:H2
+      {s:{r:2,c:5},e:{r:2,c:7}},  // F3:H3
+      // FROM / TO
+      {s:{r:5,c:0},e:{r:5,c:3}},  // A6:D6
+      {s:{r:5,c:4},e:{r:5,c:7}},  // E6:H6
+      {s:{r:6,c:0},e:{r:6,c:3}},  // A7:D7
+      {s:{r:6,c:4},e:{r:6,c:7}},  // E7:H7
+      {s:{r:7,c:0},e:{r:7,c:3}},  // A8:D8
+      {s:{r:7,c:4},e:{r:7,c:7}},  // E8:H8
+      {s:{r:8,c:0},e:{r:8,c:3}},  // A9:D9
+      {s:{r:8,c:4},e:{r:8,c:7}},  // E9:H9
+      {s:{r:9,c:0},e:{r:9,c:3}},  // A10:D10
+      {s:{r:9,c:4},e:{r:9,c:7}},  // E10:H10
+      {s:{r:10,c:0},e:{r:10,c:3}}, // A11:D11
+      // Table header: Description A:C merged, Unit Price F:G merged
+      {s:{r:12,c:0},e:{r:12,c:2}}, // A13:C13
+      {s:{r:12,c:5},e:{r:12,c:6}}, // F13:G13
+    ];
+    // Item rows: merge A:C and F:G for each
+    docItems.forEach((_,i)=>{
+      const r=13+i; // 0-indexed row
+      ws["!merges"].push({s:{r,c:0},e:{r,c:2}}); // A:C
+      ws["!merges"].push({s:{r,c:5},e:{r,c:6}}); // F:G
+    });
+    // Totals: D:F merged, G:H merged
+    const gR=gapRow-1; // 0-indexed
+    ws["!merges"].push({s:{r:gR,c:3},e:{r:gR,c:5}});   // Sub Total D:F
+    ws["!merges"].push({s:{r:gR,c:6},e:{r:gR,c:7}});   // Sub Total G:H
+    ws["!merges"].push({s:{r:gR+1,c:3},e:{r:gR+1,c:5}});// Shipping D:F
+    ws["!merges"].push({s:{r:gR+1,c:6},e:{r:gR+1,c:7}});// Shipping G:H
+    ws["!merges"].push({s:{r:gR+2,c:3},e:{r:gR+2,c:5}});// Total D:F
+    ws["!merges"].push({s:{r:gR+2,c:6},e:{r:gR+2,c:7}});// Total G:H
+
+    XLSX.utils.book_append_sheet(wb,ws,"Invoice");
+    const xlsxData=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+    const blob=new Blob([xlsxData],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`${docNumber}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const grand=(subtotal+shippingCost)*(mode==="invoice"?currencyRate:1);
@@ -5002,8 +5196,9 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>setStep(mode==="invoice"?4:3)} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+            <button onClick={generateExcel} style={{flex:1,padding:10,background:T.blue||"#3b82f6",color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>📥 Excel</button>
             <button onClick={saveDocument} disabled={saving} style={{flex:1,padding:10,background:saving?"#ccc":T.green,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:saving?"default":"pointer"}}>
-              {saving?"保存中...":"保存"}
+              {saving?"保存中...":"保存+Excel"}
             </button>
           </div>
         </div>
