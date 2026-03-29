@@ -3967,7 +3967,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     const base=(selectedAccount?(deals||[]).filter(d=>d.account_id===selectedAccount.id):(deals||[])).filter(d=>!closedStages.includes(d.stage));
     if(!dealSearch)return base.slice(0,20);
     const q=dealSearch.toLowerCase();
-    return base.filter(d=>d.opportunity_name?.toLowerCase().includes(q)).slice(0,20);
+    return base.filter(d=>d.name?.toLowerCase().includes(q)).slice(0,20);
   },[deals,dealSearch,selectedAccount]);
 
   // Close dropdowns on outside click
@@ -5031,11 +5031,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
           <div ref={dealDropRef} style={{gridColumn:IS_MOBILE?"auto":"span 2",position:"relative"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>案件リンク（オプション）</div>
-            <input value={dealDropOpen?dealSearch:(selectedDeal?.opportunity_name||"")} onChange={e=>{setDealSearch(e.target.value);setDealDropOpen(true)}} onFocus={()=>{setDealSearch("");setDealDropOpen(true)}} placeholder="案件名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${dealDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+            <input value={dealDropOpen?dealSearch:(selectedDeal?.name||"")} onChange={e=>{setDealSearch(e.target.value);setDealDropOpen(true)}} onFocus={()=>{setDealSearch("");setDealDropOpen(true)}} placeholder="案件名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${dealDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
             {selectedDeal&&!dealDropOpen&&<button onClick={()=>{setSelectedDeal(null);setDealSearch("")}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
             {dealDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
               {filteredDeals.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当なし</div>}
-              {filteredDeals.map(d=><div key={d.id} onClick={()=>{setSelectedDeal(d);setDealDropOpen(false);setDealSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:selectedDeal?.id===d.id?T.primary+"15":"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"10"} onMouseLeave={e=>e.currentTarget.style.background=selectedDeal?.id===d.id?T.primary+"15":"transparent"}>{d.opportunity_name}{d.account_name?` (${d.account_name})`:""}</div>)}
+              {filteredDeals.map(d=><div key={d.id} onClick={()=>{setSelectedDeal(d);setDealDropOpen(false);setDealSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:selectedDeal?.id===d.id?T.primary+"15":"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"10"} onMouseLeave={e=>e.currentTarget.style.background=selectedDeal?.id===d.id?T.primary+"15":"transparent"}>{d.name}{d.account_id?` (${(accounts||[]).find(a=>a.id===d.account_id)?.name||""})`:""}</div>)}
             </div>}
           </div>
 
