@@ -3914,6 +3914,10 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[carrier,setCarrier]=useState("UPS");
   const[service,setService]=useState("Expedited");
   const[shippingCountry,setShippingCountry]=useState("");
+  const[countryList,setCountryList]=useState([]);
+  const[countrySearch,setCountrySearch]=useState("");
+  const[showCountryDropdown,setShowCountryDropdown]=useState(false);
+  const countryRef=useRef(null);
   const[shippingCost,setShippingCost]=useState(0);
   const[shippingBreakdown,setShippingBreakdown]=useState(null);
   const[fobRate,setFobRate]=useState(0.08);
@@ -3943,6 +3947,27 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     }
     return current.jan!==prod.jan?current:null;
   };
+
+  // Load unique country list from shipping_zones
+  useEffect(()=>{
+    if(!client)return;
+    client.from("shipping_zones").select("country").then(({data})=>{
+      if(data){const unique=[...new Set(data.map(r=>r.country).filter(Boolean))].sort();setCountryList(unique)}
+    });
+  },[client]);
+
+  // Close country dropdown on outside click
+  useEffect(()=>{
+    const handler=(e)=>{if(countryRef.current&&!countryRef.current.contains(e.target))setShowCountryDropdown(false)};
+    document.addEventListener("mousedown",handler);return()=>document.removeEventListener("mousedown",handler);
+  },[]);
+
+  const filteredCountries=useMemo(()=>{
+    if(!countrySearch)return countryList;
+    const q=countrySearch.toLowerCase();
+    return countryList.filter(c=>c.toLowerCase().includes(q));
+  },[countryList,countrySearch]);
+
   const[currencyRateEditable,setCurrencyRateEditable]=useState("");
 
   // State: UI
@@ -4857,7 +4882,18 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
               </div>
               <div style={{gridColumn:IS_MOBILE?"auto":"span 2"}}>
                 <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>配送先国</div>
-                <input value={shippingCountry} onChange={e=>setShippingCountry(e.target.value)} placeholder="例: United States" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+                <div ref={countryRef} style={{position:"relative"}}>
+                  <input value={showCountryDropdown?countrySearch:shippingCountry} onChange={e=>{setCountrySearch(e.target.value);setShowCountryDropdown(true)}} onFocus={()=>{setCountrySearch("");setShowCountryDropdown(true)}} placeholder="国名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${showCountryDropdown?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  {shippingCountry&&!showCountryDropdown&&<button onClick={()=>{setShippingCountry("");setCountrySearch("")}} style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted,padding:0}}>✕</button>}
+                  {showCountryDropdown&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
+                    {filteredCountries.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当する国がありません</div>}
+                    {filteredCountries.map(c=>(
+                      <div key={c} onClick={()=>{setShippingCountry(c);setCountrySearch("");setShowCountryDropdown(false)}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:shippingCountry===c?T.primary+"15":"transparent",fontWeight:shippingCountry===c?600:400,borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"10"} onMouseLeave={e=>e.currentTarget.style.background=shippingCountry===c?T.primary+"15":"transparent"}>
+                        {c}
+                      </div>
+                    ))}
+                  </div>}
+                </div>
               </div>
               {shippingBreakdown&&(
                 <div style={{gridColumn:IS_MOBILE?"auto":"span 2",padding:10,background:T.card,borderRadius:6,fontSize:10,display:"grid",gridTemplateColumns:"1fr 1fr"}}>
