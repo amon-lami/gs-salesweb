@@ -5072,23 +5072,27 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const grand=(subtotal+shippingCost)*(mode==="invoice"?currencyRate:1);
 
   return(
-    <div style={{padding:IS_MOBILE?8:16,background:T.bg,minHeight:"100%",display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{padding:IS_MOBILE?8:20,background:T.bg,minHeight:"100%",display:"flex",flexDirection:"column",gap:12,maxWidth:900,margin:"0 auto"}}>
       {/* Header */}
-      <div style={{background:T.card,borderRadius:12,padding:"12px 16px",border:`1px solid ${T.border}`}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"space-between",marginBottom:10}}>
+      <div style={{background:T.card,borderRadius:8,padding:"14px 16px",border:`1px solid ${T.border}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"space-between",marginBottom:12}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <button onClick={()=>{if(step>1){window.history.back()}else{onBack?.()}}} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:T.bg,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.sub}}>←</button>
-            <h2 style={{margin:0,fontSize:15,fontWeight:700,color:T.primary}}>{mode==="quotation"?"見積書作成":"請求書作成"}</h2>
+            <div>
+              <h2 style={{margin:0,fontSize:16,fontWeight:800,color:T.text,letterSpacing:"-0.3px"}}>{mode==="quotation"?"見積書作成":"請求書作成"}</h2>
+              <div style={{fontSize:10,color:T.muted,marginTop:1}}>{mode==="quotation"?"Quotation":"Invoice"}</div>
+            </div>
           </div>
+          <div style={{fontSize:10,color:T.muted,fontWeight:600}}>Step {step}/{mode==="invoice"?5:4}</div>
         </div>
         {(()=>{const totalSteps=mode==="invoice"?5:4;const labels=mode==="invoice"?["顧客情報","商品入力","配送条件","通貨設定","確認・出力"]:["顧客情報","商品入力","配送条件","確認・出力"];return(
-          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <div style={{display:"flex",gap:2,alignItems:"center"}}>
             {labels.map((l,i)=>{const s=i+1;const done=step>s;const active=step===s;return(
               <React.Fragment key={i}>
-                {i>0&&<div style={{flex:1,height:2,background:done?T.accent||"#2d8cf0":T.border,borderRadius:1}}/>}
+                {i>0&&<div style={{flex:1,height:2,background:done?T.accent||"#2d8cf0":active?(T.accent||"#2d8cf0")+"40":T.border,borderRadius:1,transition:"background .2s"}}/>}
                 <div style={{display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-                  <div style={{width:20,height:20,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,background:done?T.accent||"#2d8cf0":active?T.accent||"#2d8cf0":"transparent",color:done||active?"#fff":T.muted,border:`2px solid ${done||active?T.accent||"#2d8cf0":T.border}`}}>{done?"✓":s}</div>
-                  {!IS_MOBILE&&<span style={{fontSize:10,fontWeight:active?700:500,color:active?T.accent||"#2d8cf0":done?T.text:T.muted}}>{l}</span>}
+                  <div style={{width:22,height:22,borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,background:done?T.accent||"#2d8cf0":active?T.accent||"#2d8cf0":"transparent",color:done||active?"#fff":T.muted,border:`2px solid ${done||active?T.accent||"#2d8cf0":T.border}`,transition:"all .2s"}}>{done?"✓":s}</div>
+                  {!IS_MOBILE&&<span style={{fontSize:10,fontWeight:active?700:500,color:active?T.text:done?T.sub:T.muted}}>{l}</span>}
                 </div>
               </React.Fragment>
             )})}
@@ -5098,10 +5102,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
       {/* Step 1: Client Info */}
       {step===1&&(
-        <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:12}}>
+        <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:12}}>
           <div style={{gridColumn:IS_MOBILE?"auto":"span 2",display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-            <div style={{width:28,height:28,borderRadius:8,background:(T.accent||"#2d8cf0")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
+            <div style={{width:24,height:24,borderRadius:6,background:(T.accent||"#2d8cf0")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
             <span style={{fontSize:12,fontWeight:700,color:T.text}}>顧客情報</span>
+            <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 1</span>
           </div>
           <div ref={acctDropRef} style={{position:"relative"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>顧客選択</div>
@@ -5166,10 +5171,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
       {/* Step 2: Add Products */}
       {step===2&&(
-        <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`}}>
-            <div style={{width:28,height:28,borderRadius:8,background:(T.green||"#22c55e")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke={T.green||"#22c55e"} strokeWidth="1.3"/><path d="M5 8h6M8 5v6" stroke={T.green||"#22c55e"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
+            <div style={{width:24,height:24,borderRadius:6,background:(T.green||"#22c55e")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke={T.green||"#22c55e"} strokeWidth="1.3"/><path d="M5 8h6M8 5v6" stroke={T.green||"#22c55e"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
             <span style={{fontSize:12,fontWeight:700,color:T.text}}>商品入力</span>
+            <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 2</span>
           </div>
           <div style={{display:"flex",gap:6}}>
             {[{k:"ai",l:"GS-AI",icon:"🤖"},{k:"search",l:"手動検索",icon:"🔍"}].map(t=>(
@@ -5290,10 +5296,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
       {/* Step 3: Shipping & Incoterms */}
       {step===3&&(
-        <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-            <div style={{width:28,height:28,borderRadius:8,background:(T.orange||"#f59e0b")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M1 10l3-8h8l3 8" stroke={T.orange||"#f59e0b"} strokeWidth="1.3"/><path d="M1 10h14v3H1z" stroke={T.orange||"#f59e0b"} strokeWidth="1.3"/></svg></div>
+            <div style={{width:24,height:24,borderRadius:6,background:(T.orange||"#f59e0b")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M1 10l3-8h8l3 8" stroke={T.orange||"#f59e0b"} strokeWidth="1.3"/><path d="M1 10h14v3H1z" stroke={T.orange||"#f59e0b"} strokeWidth="1.3"/></svg></div>
             <span style={{fontSize:12,fontWeight:700,color:T.text}}>配送条件</span>
+            <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 3</span>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:T.sub,marginBottom:8}}>インコタームズ</div>
@@ -5380,10 +5387,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
       {/* Step 4: Invoice Currency (Invoice only) */}
       {mode==="invoice"&&step===4&&(
-        <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-            <div style={{width:28,height:28,borderRadius:8,background:"#a855f715",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#a855f7" strokeWidth="1.3"/><text x="8" y="11" textAnchor="middle" fill="#a855f7" fontSize="8" fontWeight="700">$</text></svg></div>
+            <div style={{width:24,height:24,borderRadius:6,background:"#a855f710",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#a855f7" strokeWidth="1.3"/><text x="8" y="11" textAnchor="middle" fill="#a855f7" fontSize="8" fontWeight="700">$</text></svg></div>
             <span style={{fontSize:12,fontWeight:700,color:T.text}}>通貨設定</span>
+            <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 4</span>
           </div>
           <div>
             <div style={{fontSize:11,fontWeight:700,color:T.primary,marginBottom:8}}>通貨</div>
@@ -5425,10 +5433,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
       {/* Step 5: Summary & Output */}
       {step===(mode==="invoice"?5:4)&&(
-        <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+        <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
           <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-            <div style={{width:28,height:28,borderRadius:8,background:(T.green||"#22c55e")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke={T.green||"#22c55e"} strokeWidth="1.3"/><path d="M5 8h6M5 11h4" stroke={T.green||"#22c55e"} strokeWidth="1.1" strokeLinecap="round"/></svg></div>
+            <div style={{width:24,height:24,borderRadius:6,background:(T.green||"#22c55e")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke={T.green||"#22c55e"} strokeWidth="1.3"/><path d="M5 8h6M5 11h4" stroke={T.green||"#22c55e"} strokeWidth="1.1" strokeLinecap="round"/></svg></div>
             <span style={{fontSize:12,fontWeight:700,color:T.text}}>確認・出力</span>
+            <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP {mode==="invoice"?5:4}</span>
           </div>
           <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr 1fr",gap:8}}>
             <div>
@@ -5612,18 +5621,21 @@ if(loading)return React.createElement("div",{style:{padding:40,textAlign:"center
 
 return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:IS_MOBILE?12:20}},
   // Header
-  React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,background:T.card,padding:"12px 16px",borderRadius:10,border:`1px solid ${T.border}`}},
+  React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
     React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10}},
-      React.createElement("div",{style:{width:32,height:32,borderRadius:8,background:(T.accent||"#2d8cf0")+"15",display:"flex",alignItems:"center",justifyContent:"center"}},
-        React.createElement("svg",{width:16,height:16,viewBox:"0 0 16 16",fill:"none"},
-          React.createElement("path",{d:"M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z",stroke:T.accent||"#2d8cf0",strokeWidth:"1.3"}),
-          React.createElement("path",{d:"M2 4l2-2h8l2 2",stroke:T.accent||"#2d8cf0",strokeWidth:"1.2"}),
-          React.createElement("path",{d:"M6 7h4",stroke:T.accent||"#2d8cf0",strokeWidth:"1.2",strokeLinecap:"round"})
+      React.createElement("div",{style:{width:36,height:36,borderRadius:8,background:"#f59e0b10",display:"flex",alignItems:"center",justifyContent:"center"}},
+        React.createElement("svg",{width:18,height:18,viewBox:"0 0 16 16",fill:"none"},
+          React.createElement("path",{d:"M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z",stroke:"#f59e0b",strokeWidth:"1.3"}),
+          React.createElement("path",{d:"M2 4l2-2h8l2 2",stroke:"#f59e0b",strokeWidth:"1.2"}),
+          React.createElement("path",{d:"M6 7h4",stroke:"#f59e0b",strokeWidth:"1.2",strokeLinecap:"round"})
         )
       ),
-      React.createElement("h2",{style:{fontSize:16,fontWeight:700,color:T.text,margin:0}},"発注管理")
+      React.createElement("div",null,
+        React.createElement("h2",{style:{fontSize:17,fontWeight:800,color:T.text,margin:0,letterSpacing:"-0.3px"}},"発注管理"),
+        React.createElement("div",{style:{fontSize:10,color:T.muted,marginTop:1}},"Order Tracking")
+      )
     ),
-    React.createElement("button",{onClick:()=>setShowStatusEditor(!showStatusEditor),style:{padding:"6px 14px",background:showStatusEditor?(T.accent||"#2d8cf0")+"12":"transparent",color:showStatusEditor?T.accent||"#2d8cf0":T.sub,border:`1px solid ${showStatusEditor?T.accent||"#2d8cf0":T.border}`,borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},showStatusEditor?"✕ 閉じる":"⚙ ステータス設定")
+    React.createElement("button",{onClick:()=>setShowStatusEditor(!showStatusEditor),style:{padding:"6px 14px",background:showStatusEditor?(T.accent||"#2d8cf0")+"12":"transparent",color:showStatusEditor?T.accent||"#2d8cf0":T.sub,border:`1px solid ${showStatusEditor?T.accent||"#2d8cf0":T.border}`,borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},showStatusEditor?"✕ 閉じる":"⚙ ステータス設定")
   ),
 
   // Status Editor
@@ -5643,32 +5655,30 @@ return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:I
   ),
 
   // Status Summary Cards
-  React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},
-    React.createElement("button",{onClick:()=>setFilterStatus("all"),style:{padding:"5px 14px",borderRadius:8,border:filterStatus==="all"?`2px solid ${T.accent||"#2d8cf0"}`:`1px solid ${T.border}`,background:filterStatus==="all"?(T.accent||"#2d8cf0")+"12":T.card,color:filterStatus==="all"?T.accent||"#2d8cf0":T.sub,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},"全て ("+items.length+")"),
-    statuses.map(s=>React.createElement("button",{key:s.id,onClick:()=>setFilterStatus(filterStatus===s.id?"all":s.id),style:{padding:"5px 14px",borderRadius:8,border:filterStatus===s.id?`2px solid ${s.color}`:`1px solid ${T.border}`,background:filterStatus===s.id?s.color+"12":T.card,color:filterStatus===s.id?s.color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},
-      React.createElement("span",{style:{display:"inline-block",width:7,height:7,borderRadius:"50%",background:s.color,marginRight:5}}),
+  React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap",marginBottom:10,padding:"8px 12px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`}},
+    React.createElement("button",{onClick:()=>setFilterStatus("all"),style:{padding:"4px 12px",borderRadius:4,border:filterStatus==="all"?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",background:filterStatus==="all"?(T.accent||"#2d8cf0")+"10":"transparent",color:filterStatus==="all"?T.accent||"#2d8cf0":T.sub,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},"全て ("+items.length+")"),
+    statuses.map(s=>React.createElement("button",{key:s.id,onClick:()=>setFilterStatus(filterStatus===s.id?"all":s.id),style:{padding:"4px 12px",borderRadius:4,border:filterStatus===s.id?`1px solid ${s.color}`:"1px solid transparent",background:filterStatus===s.id?s.color+"10":"transparent",color:filterStatus===s.id?s.color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},
+      React.createElement("span",{style:{display:"inline-block",width:6,height:6,borderRadius:"50%",background:s.color,marginRight:4}}),
       s.label+" ("+(statusCounts[s.id]||0)+")"
     ))
   ),
 
-  // Filters
-  React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
-    React.createElement("input",{value:searchText,onChange:e=>setSearchText(e.target.value),placeholder:"商品名/JAN/備考で検索...",style:{flex:1,minWidth:150,padding:"7px 12px",border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,fontFamily:"inherit",background:T.card}}),
-    React.createElement("select",{value:filterSupplier,onChange:e=>setFilterSupplier(e.target.value),style:{padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,fontFamily:"inherit",background:T.card}},
+  // Filters + Totals bar combined
+  React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10,alignItems:"center"}},
+    React.createElement("input",{value:searchText,onChange:e=>setSearchText(e.target.value),placeholder:"商品名/JAN/備考で検索...",style:{flex:1,minWidth:150,padding:"7px 12px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",background:T.card}}),
+    React.createElement("select",{value:filterSupplier,onChange:e=>setFilterSupplier(e.target.value),style:{padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",background:T.card}},
       React.createElement("option",{value:"all"},"仕入先: 全て"),
       suppliers.map(s=>React.createElement("option",{key:s,value:s},s))
     ),
-    React.createElement("select",{value:filterAccount,onChange:e=>setFilterAccount(e.target.value),style:{padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,fontFamily:"inherit",background:T.card}},
+    React.createElement("select",{value:filterAccount,onChange:e=>setFilterAccount(e.target.value),style:{padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",background:T.card}},
       React.createElement("option",{value:"all"},"案件: 全て"),
       accountIds.map(id=>React.createElement("option",{key:id,value:id},accountMap[id]||id))
+    ),
+    React.createElement("div",{style:{display:"flex",gap:12,alignItems:"center",marginLeft:"auto",fontSize:10,fontWeight:600}},
+      React.createElement("span",{style:{color:T.muted}},filtered.length+"件表示"),
+      React.createElement("span",{style:{color:T.sub}},React.createElement("span",{style:{color:T.text,fontSize:12,fontWeight:700}},"¥"+totalCost.toLocaleString())," 総額"),
+      React.createElement("span",{style:{color:T.muted}},filtered.reduce((s,i)=>s+i.quantity,0)+"pcs")
     )
-  ),
-
-  // Totals bar
-  React.createElement("div",{style:{padding:"10px 14px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,fontWeight:600,display:"flex",gap:20,flexWrap:"wrap",marginBottom:10,alignItems:"center"}},
-    React.createElement("span",{style:{color:T.sub}},"表示: ",React.createElement("span",{style:{color:T.text}},filtered.length+"件")),
-    React.createElement("span",{style:{color:T.sub}},"総仕入れ額: ",React.createElement("span",{style:{color:T.text,fontSize:13}},"¥"+totalCost.toLocaleString())),
-    React.createElement("span",{style:{color:T.sub}},"総数量: ",React.createElement("span",{style:{color:T.text}},filtered.reduce((s,i)=>s+i.quantity,0)+"pcs"))
   ),
 
   // Table
@@ -6054,20 +6064,26 @@ const generateDeliveryNote=async()=>{
 const stepLabels=["取引先","商品入力","BOX分け","出力"];
 
 return(
-<div style={{padding:IS_MOBILE?8:16,background:T.bg,minHeight:"100%",display:"flex",flexDirection:"column",gap:12}}>
+<div style={{padding:IS_MOBILE?8:20,background:T.bg,minHeight:"100%",display:"flex",flexDirection:"column",gap:12,maxWidth:900,margin:"0 auto"}}>
   {/* Header */}
-  <div style={{background:T.card,borderRadius:12,padding:"12px 16px",border:`1px solid ${T.border}`}}>
-    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
-      <button onClick={()=>{if(step>1)window.history.back();else onBack?.()}} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:T.bg,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.sub}}>←</button>
-      <h2 style={{margin:0,fontSize:15,fontWeight:700,color:T.primary}}>納品書作成</h2>
+  <div style={{background:T.card,borderRadius:8,padding:"14px 16px",border:`1px solid ${T.border}`}}>
+    <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"space-between",marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <button onClick={()=>{if(step>1)window.history.back();else onBack?.()}} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:T.bg,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.sub}}>←</button>
+        <div>
+          <h2 style={{margin:0,fontSize:16,fontWeight:800,color:T.text,letterSpacing:"-0.3px"}}>納品書作成</h2>
+          <div style={{fontSize:10,color:T.muted,marginTop:1}}>Packing List</div>
+        </div>
+      </div>
+      <div style={{fontSize:10,color:T.muted,fontWeight:600}}>Step {step}/4</div>
     </div>
-    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+    <div style={{display:"flex",gap:2,alignItems:"center"}}>
       {stepLabels.map((l,i)=>{const s=i+1;const done=step>s;const active=step===s;return(
         <React.Fragment key={i}>
-          {i>0&&<div style={{flex:1,height:2,background:done?T.accent||"#2d8cf0":T.border,borderRadius:1}}/>}
+          {i>0&&<div style={{flex:1,height:2,background:done?T.accent||"#2d8cf0":active?(T.accent||"#2d8cf0")+"40":T.border,borderRadius:1,transition:"background .2s"}}/>}
           <div style={{display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-            <div style={{width:20,height:20,borderRadius:10,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,background:done?T.accent||"#2d8cf0":active?T.accent||"#2d8cf0":"transparent",color:done||active?"#fff":T.muted,border:`2px solid ${done||active?T.accent||"#2d8cf0":T.border}`}}>{done?"✓":s}</div>
-            {!IS_MOBILE&&<span style={{fontSize:10,fontWeight:active?700:500,color:active?T.accent||"#2d8cf0":done?T.text:T.muted}}>{l}</span>}
+            <div style={{width:22,height:22,borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,background:done?T.accent||"#2d8cf0":active?T.accent||"#2d8cf0":"transparent",color:done||active?"#fff":T.muted,border:`2px solid ${done||active?T.accent||"#2d8cf0":T.border}`,transition:"all .2s"}}>{done?"✓":s}</div>
+            {!IS_MOBILE&&<span style={{fontSize:10,fontWeight:active?700:500,color:active?T.text:done?T.sub:T.muted}}>{l}</span>}
           </div>
         </React.Fragment>
       )})}
@@ -6076,10 +6092,11 @@ return(
 
   {/* Step 1: Client Info */}
   {step===1&&(
-    <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-        <div style={{width:28,height:28,borderRadius:8,background:(T.accent||"#2d8cf0")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
+        <div style={{width:24,height:24,borderRadius:6,background:(T.accent||"#2d8cf0")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
         <span style={{fontSize:12,fontWeight:700,color:T.text}}>取引先情報</span>
+        <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 1</span>
       </div>
       <div ref={acctDropRef} style={{position:"relative"}}>
         <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>取引先</div>
@@ -6102,10 +6119,11 @@ return(
 
   {/* Step 2: Product Input */}
   {step===2&&(
-    <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-        <div style={{width:28,height:28,borderRadius:8,background:(T.green||"#22c55e")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke={T.green||"#22c55e"} strokeWidth="1.3"/><path d="M5 8h6M8 5v6" stroke={T.green||"#22c55e"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
+        <div style={{width:24,height:24,borderRadius:6,background:(T.green||"#22c55e")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke={T.green||"#22c55e"} strokeWidth="1.3"/><path d="M5 8h6M8 5v6" stroke={T.green||"#22c55e"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
         <span style={{fontSize:12,fontWeight:700,color:T.text}}>商品入力</span>
+        <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 2</span>
       </div>
       {/* Mode tabs */}
       <div style={{display:"flex",gap:4}}>
@@ -6181,11 +6199,12 @@ return(
 
   {/* Step 3: BOX Grouping */}
   {step===3&&(
-    <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
+    <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
         <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <div style={{width:28,height:28,borderRadius:8,background:(T.orange||"#f59e0b")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke={T.orange||"#f59e0b"} strokeWidth="1.3"/><path d="M2 4l2-2h8l2 2" stroke={T.orange||"#f59e0b"} strokeWidth="1.2"/></svg></div>
+          <div style={{width:24,height:24,borderRadius:6,background:(T.orange||"#f59e0b")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke={T.orange||"#f59e0b"} strokeWidth="1.3"/><path d="M2 4l2-2h8l2 2" stroke={T.orange||"#f59e0b"} strokeWidth="1.2"/></svg></div>
           <span style={{fontSize:12,fontWeight:700,color:T.text}}>BOXグルーピング</span>
+          <span style={{fontSize:9,color:T.muted}}>STEP 3</span>
         </div>
         <div style={{display:"flex",gap:6}}>
           <button onClick={autoAssign} style={{padding:"4px 12px",borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:10,fontWeight:600,cursor:"pointer",color:T.sub,fontFamily:"inherit"}}>自動振り分け</button>
@@ -6241,10 +6260,11 @@ return(
 
   {/* Step 4: Output */}
   {step===4&&(
-    <div style={{background:T.card,borderRadius:12,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:16}}>
+    <div style={{background:T.card,borderRadius:8,padding:16,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:16}}>
       <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
-        <div style={{width:28,height:28,borderRadius:8,background:(T.green||"#22c55e")+"15",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3 5-5" stroke={T.green||"#22c55e"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
+        <div style={{width:24,height:24,borderRadius:6,background:(T.green||"#22c55e")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M4 8l3 3 5-5" stroke={T.green||"#22c55e"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
         <span style={{fontSize:12,fontWeight:700,color:T.text}}>出力設定</span>
+        <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 4</span>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
         <div>
@@ -6381,69 +6401,81 @@ const typeColor=(t)=>t==="quotation"?T.primary:t==="invoice"?T.accent:T.blue||"#
 if(loading)return <div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>読み込み中...</div>;
 
 return(
-<div style={{padding:IS_MOBILE?10:16,background:T.bg,minHeight:"100%"}}>
-  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-    <button onClick={onBack} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
-    <h2 style={{fontSize:15,fontWeight:700,color:T.primary,margin:0}}>書類一覧</h2>
-    <span style={{fontSize:11,color:T.muted}}>{filtered.length}件</span>
+<div style={{padding:IS_MOBILE?10:20,background:T.bg,minHeight:"100%",maxWidth:1200,margin:"0 auto"}}>
+  {/* Header */}
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <button onClick={onBack} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:T.card,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.sub}}>←</button>
+      <div>
+        <h2 style={{fontSize:16,fontWeight:800,color:T.text,margin:0}}>書類一覧</h2>
+        <div style={{fontSize:10,color:T.muted}}>Document History</div>
+      </div>
+    </div>
+    <div style={{padding:"4px 12px",borderRadius:6,background:(T.accent||"#2d8cf0")+"10",color:T.accent||"#2d8cf0",fontSize:11,fontWeight:700}}>{filtered.length}件</div>
   </div>
 
-  {/* Filters */}
-  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-    {["all","quotation","invoice","delivery"].map(t=>(
-      <button key={t} onClick={()=>setFilterType(t)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterType===t?(t==="all"?T.primary:typeColor(t)):T.border}`,background:filterType===t?(t==="all"?T.primary:typeColor(t))+"15":"transparent",color:filterType===t?(t==="all"?T.primary:typeColor(t)):T.muted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t==="all"?"すべて":typeLabel(t)}</button>
-    ))}
-    <input value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="書類番号・取引先・案件で検索..." style={{marginLeft:"auto",padding:"6px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",width:IS_MOBILE?"100%":220}}/>
+  {/* Filters bar */}
+  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center",padding:"10px 14px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}>
+    <div style={{display:"flex",gap:4}}>
+      {["all","quotation","invoice","delivery"].map(t=>(
+        <button key={t} onClick={()=>setFilterType(t)} style={{padding:"5px 14px",borderRadius:6,border:filterType===t?`1px solid ${t==="all"?T.accent||"#2d8cf0":typeColor(t)}`:`1px solid transparent`,background:filterType===t?(t==="all"?T.accent||"#2d8cf0":typeColor(t))+"12":"transparent",color:filterType===t?(t==="all"?T.accent||"#2d8cf0":typeColor(t)):T.muted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t==="all"?"すべて":typeLabel(t)}</button>
+      ))}
+    </div>
+    <input value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="書類番号・取引先・案件で検索..." style={{marginLeft:"auto",padding:"6px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",width:IS_MOBILE?"100%":240,background:T.bg}}/>
   </div>
 
-  {/* Document Cards */}
-  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-    {filtered.length===0&&<div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>書類がありません</div>}
-    {filtered.map(doc=>{
+  {/* Document Table */}
+  {filtered.length===0?<div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12,background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}>書類がありません</div>:
+  <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden",background:T.card}}>
+    {/* Table header */}
+    <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"70px 1fr 140px 80px 100px 80px 120px",padding:"8px 14px",background:T.bg,borderBottom:`1px solid ${T.border}`,fontSize:10,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:"0.3px"}}>
+      <span>種別</span><span>書類番号 / 取引先</span>{!IS_MOBILE&&<><span>商談</span><span style={{textAlign:"center"}}>商品数</span><span style={{textAlign:"right"}}>合計金額</span><span style={{textAlign:"center"}}>作成日</span><span style={{textAlign:"right"}}>操作</span></>}
+    </div>
+    {/* Rows */}
+    {filtered.map((doc,i)=>{
       const dealObj=doc.deal_id?dealMap[doc.deal_id]:null;
       const acctName=doc.account_id?accountMap[doc.account_id]:doc.client_info?.companyName||"—";
       const itemCount=doc.items?.length||0;
       const isSyncing=syncing[doc.id];
-      return(
-      <div key={doc.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:IS_MOBILE?"10px":"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-        {/* Type badge */}
-        <div style={{minWidth:60,textAlign:"center"}}>
-          <span style={{display:"inline-block",padding:"3px 10px",borderRadius:12,background:typeColor(doc.doc_type)+"18",color:typeColor(doc.doc_type),fontSize:10,fontWeight:700}}>{typeLabel(doc.doc_type)}</span>
-        </div>
-        {/* Main info */}
-        <div style={{flex:1,minWidth:150}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.text}}>{doc.doc_number||"番号なし"}</div>
-          <div style={{fontSize:11,color:T.sub,marginTop:2}}>{acctName}</div>
-          {dealObj&&<div style={{fontSize:10,color:T.primary,marginTop:1}}>案件: {dealObj.name}</div>}
-        </div>
-        {/* Details */}
-        <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:9,color:T.muted}}>商品数</div>
-            <div style={{fontSize:12,fontWeight:700,color:T.text}}>{itemCount}</div>
+      return IS_MOBILE?(
+        <div key={doc.id} style={{padding:"10px 14px",borderBottom:`1px solid ${T.border}`,background:i%2===0?"transparent":T.bg+"80"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+            <span style={{padding:"2px 8px",borderRadius:4,background:typeColor(doc.doc_type)+"15",color:typeColor(doc.doc_type),fontSize:9,fontWeight:700}}>{typeLabel(doc.doc_type)}</span>
+            <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{doc.doc_number||"番号なし"}</span>
           </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:9,color:T.muted}}>合計</div>
-            <div style={{fontSize:12,fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:10}}>
+            <div><span style={{color:T.sub}}>{acctName}</span>{dealObj&&<span style={{color:T.muted,marginLeft:6}}>{dealObj.name}</span>}</div>
+            <span style={{fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</span>
           </div>
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:9,color:T.muted}}>作成日</div>
-            <div style={{fontSize:11,color:T.sub}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+            <span style={{fontSize:9,color:T.muted}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""} / {itemCount}品目</span>
+            <div style={{display:"flex",gap:4}}>
+              {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${T.accent||"#2d8cf0"}`,background:"transparent",color:T.accent||"#2d8cf0",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
+              {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${doc.deal_id?T.green||"#22c55e":T.border}`,background:"transparent",color:doc.deal_id?T.green||"#22c55e":T.muted,fontSize:10,fontWeight:600,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,fontFamily:"inherit"}}>{isSyncing?"...":"発注反映"}</button>}
+            </div>
           </div>
         </div>
-        {/* Action buttons */}
-        <div style={{display:"flex",flexDirection:"column",gap:4}}>
-          {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"6px 14px",borderRadius:8,border:"none",background:T.accent||"#f59e0b",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>
-            請求書を作成
-          </button>}
-          {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"6px 14px",borderRadius:8,border:"none",background:doc.deal_id?(T.green||"#22c55e"):T.border,color:doc.deal_id?"#fff":T.muted,fontSize:11,fontWeight:700,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,whiteSpace:"nowrap",fontFamily:"inherit"}}>
-            {isSyncing?"反映中...":"発注に反映"}
-          </button>}
+      ):(
+        <div key={doc.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 140px 80px 100px 80px 120px",padding:"10px 14px",borderBottom:`1px solid ${T.border}`,alignItems:"center",background:i%2===0?"transparent":T.bg+"80",fontSize:11,transition:"background .1s"}}
+          onMouseEnter={e=>e.currentTarget.style.background=(T.accent||"#2d8cf0")+"05"}
+          onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"transparent":T.bg+"80"}>
+          <span style={{padding:"2px 8px",borderRadius:4,background:typeColor(doc.doc_type)+"15",color:typeColor(doc.doc_type),fontSize:9,fontWeight:700,display:"inline-block",textAlign:"center",width:"fit-content"}}>{typeLabel(doc.doc_type)}</span>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:T.text}}>{doc.doc_number||"番号なし"}</div>
+            <div style={{fontSize:10,color:T.sub,marginTop:1}}>{acctName}</div>
+          </div>
+          <div style={{fontSize:10,color:dealObj?T.text:T.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dealObj?dealObj.name:"—"}</div>
+          <div style={{textAlign:"center",fontWeight:600}}>{itemCount}</div>
+          <div style={{textAlign:"right",fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</div>
+          <div style={{textAlign:"center",fontSize:10,color:T.muted}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</div>
+          <div style={{textAlign:"right"}}>
+            {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${T.accent||"#2d8cf0"}`,background:"transparent",color:T.accent||"#2d8cf0",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
+            {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"4px 10px",borderRadius:4,border:`1px solid ${doc.deal_id?T.green||"#22c55e":T.border}`,background:"transparent",color:doc.deal_id?T.green||"#22c55e":T.muted,fontSize:10,fontWeight:600,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,fontFamily:"inherit"}}>{isSyncing?"...":"発注反映"}</button>}
+          </div>
         </div>
-      </div>
       );
     })}
-  </div>
+  </div>}
 </div>
 );
 }
@@ -6585,49 +6617,97 @@ const sn=(uid)=>{const u=(allUsers||[]).find(x=>x.id===uid);return u?u.display_n
 
 // ── Menu ──
 if(docPage==="menu"){return(
-<div style={{padding:16,background:T.bg,minHeight:"100%"}}>
-  <h2 style={{fontSize:16,fontWeight:700,color:T.primary,margin:"0 0 20px"}}>書類</h2>
-  <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr 1fr":"1fr 1fr 1fr",gap:12}}>
-    {[{id:"quotation",label:"見積書作成",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke={T.primary} strokeWidth="1.5"/><path d="M8 7h8M8 11h8M8 15h5" stroke={T.primary} strokeWidth="1.3" strokeLinecap="round"/><circle cx="17" cy="17" r="4" fill={T.primary}/><text x="17" y="19" textAnchor="middle" fill="#fff" fontSize="7" fontWeight="700">¥</text></svg>,color:T.primary},
-      {id:"invoice",label:"請求書作成",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke={T.accent} strokeWidth="1.5"/><path d="M8 7h8M8 11h8M8 15h5" stroke={T.accent} strokeWidth="1.3" strokeLinecap="round"/><circle cx="17" cy="17" r="4" fill={T.accent}/><text x="17" y="19" textAnchor="middle" fill="#fff" fontSize="7" fontWeight="700">$</text></svg>,color:T.accent},
-      {id:"delivery",label:"納品書作成",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 8l4-4h10l4 4v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke={T.blue||"#3b82f6"} strokeWidth="1.5"/><path d="M3 8h18M12 8v12" stroke={T.blue||"#3b82f6"} strokeWidth="1.3"/></svg>,color:T.blue||"#3b82f6"},
-      {id:"master",label:"マスタ編集",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke={T.sub} strokeWidth="1.5"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke={T.sub} strokeWidth="1.5" strokeLinecap="round"/></svg>,color:T.sub},
-      {id:"doc_list",label:"書類一覧",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke={T.green||"#22c55e"} strokeWidth="1.5"/><path d="M7 8h10M7 12h10M7 16h6" stroke={T.green||"#22c55e"} strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.green||"#22c55e"},
-      {id:"orders",label:"発注管理",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 7h18v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke={T.accent||"#f59e0b"} strokeWidth="1.5"/><path d="M3 7l3-3h12l3 3" stroke={T.accent||"#f59e0b"} strokeWidth="1.3"/><path d="M9 11h6" stroke={T.accent||"#f59e0b"} strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.accent||"#f59e0b"}
-    ].map(b=>(
-      <button key={b.id} onClick={()=>setDocPage(b.id)} style={{padding:20,borderRadius:12,background:T.card,border:`2px solid ${b.color}22`,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:110,gap:10,fontFamily:"inherit",transition:"all .15s"}}
-        onMouseEnter={e=>{e.currentTarget.style.borderColor=b.color;e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)"}}
-        onMouseLeave={e=>{e.currentTarget.style.borderColor=b.color+"22";e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none"}}>
-        {b.icon}
-        <span style={{fontSize:12,fontWeight:700,color:b.color}}>{b.label}</span>
-      </button>
-    ))}
+<div style={{padding:IS_MOBILE?12:20,background:T.bg,minHeight:"100%",maxWidth:960,margin:"0 auto"}}>
+  {/* Page header */}
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{width:36,height:36,borderRadius:8,background:(T.accent||"#2d8cf0")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke={T.accent||"#2d8cf0"} strokeWidth="1.5"/><path d="M8 7h8M8 11h8M8 15h5" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3" strokeLinecap="round"/></svg>
+      </div>
+      <div>
+        <h2 style={{fontSize:17,fontWeight:800,color:T.text,margin:0,letterSpacing:"-0.3px"}}>書類管理</h2>
+        <div style={{fontSize:10,color:T.muted,marginTop:1}}>Documents & Orders</div>
+      </div>
+    </div>
+  </div>
+
+  {/* Section: 書類作成 */}
+  <div style={{marginBottom:20}}>
+    <div style={{fontSize:10,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8,paddingLeft:2}}>書類作成</div>
+    <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr 1fr",gap:10}}>
+      {[
+        {id:"quotation",label:"見積書作成",desc:"Quotation",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 7h8M8 11h8M8 15h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.primary},
+        {id:"invoice",label:"請求書作成",desc:"Invoice",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M8 7h8M8 11h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="16" cy="16" r="4" stroke="currentColor" strokeWidth="1.3"/><path d="M16 14v4M14 16h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>,color:T.accent||"#2d8cf0"},
+        {id:"delivery",label:"納品書作成",desc:"Packing List",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 8l4-4h10l4 4v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke="currentColor" strokeWidth="1.5"/><path d="M3 8h18" stroke="currentColor" strokeWidth="1.3"/></svg>,color:T.blue||"#3b82f6"}
+      ].map(b=>(
+        <button key={b.id} onClick={()=>setDocPage(b.id)} style={{padding:"14px 16px",borderRadius:8,background:T.card,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",gap:12,fontFamily:"inherit",transition:"all .12s",textAlign:"left"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=b.color;e.currentTarget.style.background=b.color+"06"}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.card}}>
+          <div style={{width:36,height:36,borderRadius:8,background:b.color+"10",color:b.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{b.icon}</div>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>{b.label}</div>
+            <div style={{fontSize:10,color:T.muted,marginTop:1}}>{b.desc}</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{marginLeft:"auto",flexShrink:0,opacity:.3}}><path d="M6 4l4 4-4 4" stroke={T.sub} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      ))}
+    </div>
+  </div>
+
+  {/* Section: 管理 */}
+  <div style={{marginBottom:20}}>
+    <div style={{fontSize:10,fontWeight:700,color:T.muted,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8,paddingLeft:2}}>管理・データ</div>
+    <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr 1fr",gap:10}}>
+      {[
+        {id:"orders",label:"発注管理",desc:"Order Tracking",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 7h18v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke="currentColor" strokeWidth="1.5"/><path d="M3 7l3-3h12l3 3" stroke="currentColor" strokeWidth="1.3"/><path d="M9 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,color:"#f59e0b"},
+        {id:"doc_list",label:"書類一覧",desc:"Document History",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M7 8h10M7 12h10M7 16h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.green||"#22c55e"},
+        {id:"master",label:"商品マスタ",desc:"Product Master",icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.sub}
+      ].map(b=>(
+        <button key={b.id} onClick={()=>setDocPage(b.id)} style={{padding:"14px 16px",borderRadius:8,background:T.card,border:`1px solid ${T.border}`,cursor:"pointer",display:"flex",alignItems:"center",gap:12,fontFamily:"inherit",transition:"all .12s",textAlign:"left"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=b.color;e.currentTarget.style.background=b.color+"06"}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.border;e.currentTarget.style.background=T.card}}>
+          <div style={{width:36,height:36,borderRadius:8,background:b.color+"10",color:b.color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{b.icon}</div>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>{b.label}</div>
+            <div style={{fontSize:10,color:T.muted,marginTop:1}}>{b.desc}</div>
+          </div>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" style={{marginLeft:"auto",flexShrink:0,opacity:.3}}><path d="M6 4l4 4-4 4" stroke={T.sub} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
+      ))}
+    </div>
   </div>
 </div>
 )}
 
 // ── Master Editor ──
 if(docPage==="master"){return(
-<div style={{padding:IS_MOBILE?"10px":"16px",background:T.bg,minHeight:"100%"}}>
+<div style={{padding:IS_MOBILE?"10px":"20px",background:T.bg,minHeight:"100%",maxWidth:1200,margin:"0 auto"}}>
   {/* Header */}
-  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-    <button onClick={()=>window.history.back()} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
-    <h2 style={{fontSize:15,fontWeight:700,color:T.primary,margin:0,flex:1}}>商品マスタ <span style={{fontSize:11,fontWeight:400,color:T.muted}}>({totalCount}件)</span></h2>
-    <button onClick={()=>openEdit(null)} style={{padding:"6px 12px",background:T.green,color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>+ 新規</button>
-    <label style={{padding:"6px 12px",background:T.blue||"#3b82f6",color:"#fff",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-      CSV<input type="file" accept=".csv" style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleCsvFile(e.target.files[0]);e.target.value=""}}/>
-    </label>
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <button onClick={()=>window.history.back()} style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.border}`,background:T.card,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.sub}}>←</button>
+      <div>
+        <h2 style={{fontSize:16,fontWeight:800,color:T.text,margin:0}}>商品マスタ</h2>
+        <div style={{fontSize:10,color:T.muted,marginTop:1}}>Product Master / {totalCount}件</div>
+      </div>
+    </div>
+    <div style={{display:"flex",gap:6}}>
+      <label style={{padding:"6px 12px",background:T.card,color:T.sub,border:`1px solid ${T.border}`,borderRadius:6,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+        CSV Import<input type="file" accept=".csv" style={{display:"none"}} onChange={e=>{if(e.target.files[0])handleCsvFile(e.target.files[0]);e.target.value=""}}/>
+      </label>
+      <button onClick={()=>openEdit(null)} style={{padding:"6px 14px",background:T.accent||"#2d8cf0",color:"#fff",border:"none",borderRadius:6,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ 新規追加</button>
+    </div>
   </div>
   {/* Search + Filters */}
-  <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-    <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="検索 (名前・JAN・ブランド)" style={{flex:1,minWidth:150,padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11.5,fontFamily:"inherit",outline:"none"}}/>
+  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",padding:"10px 12px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}>
+    <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="商品名 / JAN / ブランドで検索..." style={{flex:1,minWidth:150,padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",outline:"none",background:T.bg}}/>
     <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:T.sub}}>
       <option value="">全ステータス</option><option value="active">アクティブ</option><option value="inactive">非アクティブ</option><option value="discontinued">廃盤</option>
     </select>
-  </div>
-  <div style={{display:"flex",gap:4,marginBottom:10,flexWrap:"wrap"}}>
-    <button onClick={()=>{setFilterBrand("");setCurrentPage(0)}} style={{padding:"4px 8px",background:!filterBrand?T.primary:T.borderLight||"#eee",color:!filterBrand?"#fff":T.muted,border:"none",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}}>全て</button>
-    {topBrands.map(b=><button key={b} onClick={()=>{setFilterBrand(filterBrand===b?"":b);setCurrentPage(0)}} style={{padding:"4px 8px",background:filterBrand===b?T.primary:T.borderLight||"#eee",color:filterBrand===b?"#fff":T.muted,border:"none",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b}</button>)}
+    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+      <button onClick={()=>{setFilterBrand("");setCurrentPage(0)}} style={{padding:"4px 10px",background:!filterBrand?(T.accent||"#2d8cf0")+"12":"transparent",color:!filterBrand?T.accent||"#2d8cf0":T.muted,border:!filterBrand?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}}>全て</button>
+      {topBrands.map(b=><button key={b} onClick={()=>{setFilterBrand(filterBrand===b?"":b);setCurrentPage(0)}} style={{padding:"4px 10px",background:filterBrand===b?(T.accent||"#2d8cf0")+"12":"transparent",color:filterBrand===b?T.accent||"#2d8cf0":T.muted,border:filterBrand===b?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b}</button>)}
+    </div>
   </div>
   {/* Error */}
   {error&&<div style={{padding:8,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,marginBottom:8}}>{error}</div>}
