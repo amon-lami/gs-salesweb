@@ -3927,6 +3927,22 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[notes,setNotes]=useState("");
   const[bankDetails,setBankDetails]=useState(null);
   const[currencyRate,setCurrencyRate]=useState(1);
+
+  // Successor chain resolver: follows successor_jan links up to 5 hops
+  const resolveSuccessor=async(prod)=>{
+    if(!prod.is_discontinued||!prod.successor_jan)return null;
+    let current=prod;const visited=new Set([prod.jan]);
+    for(let i=0;i<5;i++){
+      if(!current.successor_jan)break;
+      if(visited.has(current.successor_jan))break;
+      visited.add(current.successor_jan);
+      const{data}=await client.from("product_master").select("*").eq("jan",current.successor_jan).limit(1);
+      if(!data||!data[0])break;
+      current=data[0];
+      if(!current.is_discontinued)return current; // found active successor
+    }
+    return current.jan!==prod.jan?current:null;
+  };
   const[currencyRateEditable,setCurrencyRateEditable]=useState("");
 
   // State: UI
@@ -4060,6 +4076,24 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
         }
 
         if(prod){
+          // Check if discontinued and has successor
+          if(prod.is_discontinued&&prod.successor_jan){
+            const succ=await resolveSuccessor(prod);
+            if(succ){
+              resolvedItems.push({
+                product_id:succ.id,jan:succ.jan,
+                name_en:succ.name_en||succ.name_ja||"",
+                name_ja:succ.name_ja||succ.name_en||"",
+                quantity:item.quantity||1,
+                cost_price:succ.cost_price||0,
+                selling_price:succ.selling_price||0,
+                weight_g:succ.weight_g||0,
+                confidence:item.confidence||"high",
+                _replacedFrom:prod.jan,_replacedName:prod.name_en||prod.name_ja||""
+              });
+              continue;
+            }
+          }
           resolvedItems.push({
             product_id:prod.id,jan:prod.jan,
             name_en:prod.name_en||prod.name_ja||"",
@@ -4068,7 +4102,8 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
             cost_price:prod.cost_price||0,
             selling_price:prod.selling_price||0,
             weight_g:prod.weight_g||0,
-            confidence:item.confidence||"high"
+            confidence:item.confidence||"high",
+            _isDiscontinued:prod.is_discontinued||false
           });
         }else{
           unresolvedItems.push(item);
@@ -4082,7 +4117,13 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
         aiReply+=`✅ **マッチした商品 (${resolvedItems.length}件):**\n`;
         resolvedItems.forEach(r=>{
           const conf=r.confidence==="high"?"🟢":r.confidence==="medium"?"🟡":"🔴";
-          aiReply+=`${conf} ${r.name_en} (${r.jan}) × ${r.quantity}\n`;
+          if(r._replacedFrom){
+            aiReply+=`${conf} 🔄 ${r.name_en} (${r.jan}) × ${r.quantity}\n   └ 廃盤品 ${r._replacedFrom} (${r._replacedName}) → 後継品に自動置換\n`;
+          }else if(r._isDiscontinued){
+            aiReply+=`${conf} ⚠️ ${r.name_en} (${r.jan}) × ${r.quantity} 【廃盤・後継品未登録】\n`;
+          }else{
+            aiReply+=`${conf} ${r.name_en} (${r.jan}) × ${r.quantity}\n`;
+          }
         });
       }
 
@@ -4214,9 +4255,19 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           const jan=janMatch[1];
           const{data}=await client.from("product_master").select("*").eq("jan",jan).limit(1);
           if(data&&data.length>0){
-            const p=data[0];
+            let p=data[0];
+            // Check for discontinued with successor
+            if(p.is_discontinued&&p.successor_jan){
+              const succ=await resolveSuccessor(p);
+              if(succ){
+                log.push({ok:true,text:`🔄 ${p.name_en||p.name_ja} (${jan}) は廃盤 → 後継品 ${succ.name_en||succ.name_ja} (${succ.jan}) に置換`});
+                p=succ;
+              }else{
+                log.push({ok:true,text:`⚠ ${p.name_en||p.name_ja} (${jan}) は廃盤（後継品見つからず）`});
+              }
+            }
             parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0});
-            log.push({ok:true,text:`✓ ${p.name_en||p.name_ja} (${jan}) × ${qty}`});
+            if(!p.is_discontinued)log.push({ok:true,text:`✓ ${p.name_en||p.name_ja} (${p.jan}) × ${qty}`});
           }else{
             log.push({ok:false,text:`✗ JAN ${jan} が見つかりません`});
           }
@@ -4310,9 +4361,18 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
         if(janNum.length>=8){
           const{data}=await client.from("product_master").select("*").eq("jan",janNum).limit(1);
           if(data&&data.length>0){
-            const p=data[0];
+            let p=data[0];
+            if(p.is_discontinued&&p.successor_jan){
+              const succ=await resolveSuccessor(p);
+              if(succ){
+                log.push({ok:true,text:`🔄 ${p.name_en||p.name_ja} (${janNum}) 廃盤 → 後継品 ${succ.name_en||succ.name_ja} (${succ.jan})`});
+                p=succ;
+              }else{
+                log.push({ok:true,text:`⚠ ${p.name_en||p.name_ja} (${janNum}) 廃盤（後継品見つからず）`});
+              }
+            }
             parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0});
-            log.push({ok:true,text:`✓ ${p.name_en||p.name_ja} × ${qty}`});
+            if(!p.is_discontinued)log.push({ok:true,text:`✓ ${p.name_en||p.name_ja} × ${qty}`});
             continue;
           }
         }
@@ -4366,17 +4426,26 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     else setSearchResults([]);
   },[searchInput]);
 
-  // Add product from search
-  const addProductFromSearch=(prod)=>{
+  // Add product from search (auto-resolve successor if discontinued)
+  const addProductFromSearch=async(prod)=>{
+    let p=prod;
+    if(p.is_discontinued&&p.successor_jan){
+      const succ=await resolveSuccessor(p);
+      if(succ){
+        if(confirm(`⚠ 「${p.name_en||p.name_ja}」(${p.jan}) は廃盤です。\n\n後継品「${succ.name_en||succ.name_ja}」(${succ.jan}) に置き換えますか？`)){
+          p=succ;
+        }
+      }
+    }
     const newItem={
-      product_id:prod.id,
-      jan:prod.jan,
-      name_en:prod.name_en||prod.name_ja||"",
-      name_ja:prod.name_ja||prod.name_en||"",
+      product_id:p.id,
+      jan:p.jan,
+      name_en:p.name_en||p.name_ja||"",
+      name_ja:p.name_ja||p.name_en||"",
       quantity:addQty,
-      cost_price:prod.cost_price||0,
-      selling_price:prod.selling_price||0,
-      weight_g:prod.weight_g||0
+      cost_price:p.cost_price||0,
+      selling_price:p.selling_price||0,
+      weight_g:p.weight_g||0
     };
     setDocItems(prev=>[...prev,newItem]);
     setSearchInput("");
@@ -4698,8 +4767,8 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
               {searchResults.length>0&&(
                 <div style={{gridColumn:IS_MOBILE?"auto":"span 3",display:"grid",gridTemplateColumns:"1fr",gap:4,maxHeight:200,overflowY:"auto"}}>
                   {searchResults.map(p=>(
-                    <div key={p.id} onClick={()=>addProductFromSearch(p)} style={{padding:8,background:T.borderLight,borderRadius:6,cursor:"pointer",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div><strong>{p.name_en||p.name_ja}</strong> · {p.jan}</div>
+                    <div key={p.id} onClick={()=>addProductFromSearch(p)} style={{padding:8,background:p.is_discontinued?"#fff7ed":T.borderLight,borderRadius:6,cursor:"pointer",fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",border:p.is_discontinued?"1px solid #fed7aa":"none"}}>
+                      <div><strong>{p.name_en||p.name_ja}</strong> · {p.jan}{p.is_discontinued&&<span style={{marginLeft:4,fontSize:9,padding:"1px 4px",background:"#dc2626",color:"#fff",borderRadius:3,fontWeight:600}}>廃盤</span>}{p.is_discontinued&&p.successor_jan&&<span style={{marginLeft:3,fontSize:9,color:"#c2410c"}}>→後継品あり</span>}</div>
                       <button style={{background:T.green,color:"#fff",border:"none",borderRadius:4,padding:"4px 8px",fontSize:10,fontWeight:600,cursor:"pointer"}}>+追加</button>
                     </div>
                   ))}
@@ -4962,7 +5031,8 @@ useEffect(()=>{
   load("brand",setBrands);load("supplier",setSuppliers);load("sub_brand",setSubBrands);
 },[client,docPage]);
 
-const openEdit=(p)=>{const obj=p?{...p}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",supplier:"",image_url:"",cost_price:null,list_price:null,selling_price:null,case_quantity:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false};setEditProduct(obj);setOrigProduct(p?{...p}:null);setSaveErr("");setShowEdit(true)};
+const[successorPreview,setSuccessorPreview]=useState(null);
+const openEdit=(p)=>{const obj=p?{...p}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",supplier:"",image_url:"",cost_price:null,list_price:null,selling_price:null,case_quantity:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:""};setEditProduct(obj);setOrigProduct(p?{...p}:null);setSaveErr("");setSuccessorPreview(null);setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
 const closeEdit=()=>{setShowEdit(false);setEditProduct(null);setOrigProduct(null)};
 
 const saveProduct=async()=>{
@@ -4972,7 +5042,7 @@ const saveProduct=async()=>{
   try{
     if(editProduct.id){
       const updates={};const auditEntries=[];
-      const fields=["name_ja","name_en","jan","brand","sub_brand","supplier","image_url","cost_price","list_price","selling_price","case_quantity","weight_g","price_break_qty","status","ingredients_en","is_discontinued"];
+      const fields=["name_ja","name_en","jan","brand","sub_brand","supplier","image_url","cost_price","list_price","selling_price","case_quantity","weight_g","price_break_qty","status","ingredients_en","is_discontinued","successor_jan"];
       fields.forEach(f=>{if(JSON.stringify(editProduct[f])!==JSON.stringify(origProduct[f])){updates[f]=editProduct[f];auditEntries.push({product_id:editProduct.id,changed_by:user.id,field_name:f,old_value:String(origProduct[f]??""),new_value:String(editProduct[f]??""),changed_at:new Date().toISOString()})}});
       if(Object.keys(updates).length>0){
         updates.updated_at=new Date().toISOString();
@@ -5084,7 +5154,8 @@ if(docPage==="master"){return(
       <div style={{textAlign:"right",flexShrink:0}}>
         {p.cost_price!=null&&<div style={{fontSize:10,color:T.sub}}>¥{Number(p.cost_price).toLocaleString()}</div>}
         {p.selling_price!=null&&<div style={{fontSize:10,fontWeight:600,color:T.green}}>${Number(p.selling_price).toFixed(2)}</div>}
-        <span style={{fontSize:8,padding:"1px 4px",borderRadius:3,background:p.status==="active"?T.green+"18":T.red+"18",color:p.status==="active"?T.green:T.red,fontWeight:600}}>{p.status==="active"?"有効":"停止"}</span>
+        <span style={{fontSize:8,padding:"1px 4px",borderRadius:3,background:p.status==="active"?T.green+"18":p.is_discontinued?"#dc262618":T.red+"18",color:p.status==="active"?T.green:p.is_discontinued?"#dc2626":T.red,fontWeight:600}}>{p.is_discontinued?"廃盤":p.status==="active"?"有効":"停止"}</span>
+        {p.is_discontinued&&p.successor_jan&&<div style={{fontSize:8,color:"#c2410c",marginTop:1}}>→{p.successor_jan}</div>}
       </div>
       <button onClick={e=>{e.stopPropagation();openAudit(p.id)}} style={{background:"none",border:"none",fontSize:10,color:T.blue||"#3b82f6",cursor:"pointer",textDecoration:"underline",flexShrink:0}} title="変更履歴">履歴</button>
     </div>
@@ -5131,6 +5202,13 @@ if(docPage==="master"){return(
       <label style={{display:"flex",alignItems:"center",gap:6,marginTop:8,fontSize:11,color:T.sub,cursor:"pointer"}}>
         <input type="checkbox" checked={editProduct.is_discontinued||false} onChange={e=>setEditProduct(prev=>({...prev,is_discontinued:e.target.checked}))}/>廃盤フラグ
       </label>
+      {(editProduct.is_discontinued||editProduct.successor_jan)&&<div style={{marginTop:8,padding:10,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8}}>
+        <div style={{fontSize:10,fontWeight:600,color:"#c2410c",marginBottom:5}}>🔄 後継品（リニューアル品）JAN</div>
+        <input value={editProduct.successor_jan||""} placeholder="後継品のJANコードを入力" onChange={e=>{const v=e.target.value.replace(/[^\d]/g,"");setEditProduct(prev=>({...prev,successor_jan:v}));setSuccessorPreview(null);if(v.length>=8){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",v).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})}}} style={{width:"100%",padding:"7px 8px",border:"1px solid #fed7aa",borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box",background:"#fff"}}/>
+        {successorPreview&&<div style={{marginTop:5,padding:6,background:"#dcfce7",borderRadius:5,fontSize:11,color:"#166534"}}>✅ {successorPreview.name_en||successorPreview.name_ja} {successorPreview.brand?`(${successorPreview.brand})`:""} - {successorPreview.jan}</div>}
+        {editProduct.successor_jan&&editProduct.successor_jan.length>=8&&!successorPreview&&<div style={{marginTop:5,fontSize:10,color:"#dc2626"}}>⚠ このJANコードの商品がマスタに見つかりません</div>}
+        {editProduct.successor_jan&&editProduct.successor_jan===editProduct.jan&&<div style={{marginTop:3,fontSize:10,color:"#dc2626"}}>⚠ 自分自身のJANは設定できません</div>}
+      </div>}
       {editProduct.image_url&&<div style={{marginTop:8}}><img src={editProduct.image_url} style={{maxHeight:60,borderRadius:6}} onError={e=>e.target.style.display="none"}/></div>}
       {/* Profit preview */}
       {editProduct.selling_price&&editProduct.cost_price&&<div style={{marginTop:10,padding:8,background:T.green+"10",borderRadius:6,fontSize:11}}>
