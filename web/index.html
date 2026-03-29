@@ -3160,15 +3160,25 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
   const[orderStatuses,setOrderStatuses]=useState([]);
   const[dealDocs,setDealDocs]=useState([]);
   const[stageToast,setStageToast]=useState(null);
+  const[shipments,setShipments]=useState([]);
+  const[payments,setPayments]=useState([]);
+  const[creditNotes,setCreditNotes]=useState([]);
+  const[showPaymentForm,setShowPaymentForm]=useState(false);
+  const[showShipmentForm,setShowShipmentForm]=useState(false);
+  const[showCreditForm,setShowCreditForm]=useState(false);
 
   useEffect(()=>{
     (async()=>{
-      const[{data:oi},{data:os},{data:dd}]=await Promise.all([
+      const[{data:oi},{data:os},{data:dd},{data:sh},{data:py},{data:cn}]=await Promise.all([
         client.from("order_items").select("*").eq("deal_id",deal.id).order("created_at"),
         client.from("order_statuses").select("*").order("sort_order"),
-        client.from("generated_documents").select("*").eq("deal_id",deal.id).order("created_at",{ascending:false})
+        client.from("generated_documents").select("*").eq("deal_id",deal.id).order("created_at",{ascending:false}),
+        client.from("shipments").select("*").eq("deal_id",deal.id).order("created_at").then(r=>r).catch(()=>({data:[]})),
+        client.from("invoice_payments").select("*").eq("deal_id",deal.id).order("created_at").then(r=>r).catch(()=>({data:[]})),
+        client.from("credit_notes").select("*").eq("deal_id",deal.id).order("created_at").then(r=>r).catch(()=>({data:[]}))
       ]);
       setOrderItems(oi||[]);setOrderStatuses(os||[]);setDealDocs(dd||[]);
+      setShipments(sh||[]);setPayments(py||[]);setCreditNotes(cn||[]);
     })();
   },[deal.id]);
 
@@ -3412,6 +3422,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
                   <tr style={{borderBottom:`1px solid ${T.border}`}}>
                     <th style={{textAlign:"left",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>商品名</th>
                     <th style={{textAlign:"center",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>数量</th>
+                    <th style={{textAlign:"center",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>出荷済</th>
                     <th style={{textAlign:"left",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>仕入先</th>
                     <th style={{textAlign:"center",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>ステータス</th>
                     <th style={{textAlign:"right",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>下代</th>
@@ -3426,6 +3437,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
                       <tr key={it.id} style={{borderBottom:`1px solid ${T.borderLight}`}}>
                         <td style={{padding:"5px 4px",fontWeight:600,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name_en||it.name_ja}</td>
                         <td style={{padding:"5px 4px",textAlign:"center"}}>{it.quantity}</td>
+                        <td style={{padding:"5px 4px",textAlign:"center",fontSize:9,fontWeight:600,color:(it.shipped_quantity||0)>=it.quantity?"#22c55e":(it.shipped_quantity||0)>0?"#f59e0b":T.muted}}>{it.shipped_quantity||0}/{it.quantity}</td>
                         <td style={{padding:"5px 4px",color:T.sub}}>{it.supplier||"-"}</td>
                         <td style={{padding:"4px 4px",textAlign:"center"}}>
                           <select value={it.status} onChange={async(e)=>{
@@ -3454,6 +3466,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
                   <tr style={{borderTop:`1.5px solid ${T.border}`}}>
                     <td style={{padding:"5px 4px",fontWeight:700,fontSize:9}}>合計 {orderItems.length}品目</td>
                     <td style={{padding:"5px 4px",textAlign:"center",fontWeight:600}}>{orderItems.reduce((s,it)=>s+it.quantity,0)}</td>
+                    <td style={{padding:"5px 4px",textAlign:"center",fontSize:9,fontWeight:600}}>{orderItems.reduce((s,it)=>s+(it.shipped_quantity||0),0)}/{orderItems.reduce((s,it)=>s+it.quantity,0)}</td>
                     <td colSpan="2"></td>
                     <td></td>
                     <td style={{padding:"5px 4px",textAlign:"right",fontWeight:700}}>¥{orderItems.reduce((s,it)=>s+Math.round((it.cost_price||0)*1.1*it.quantity),0).toLocaleString()}</td>
@@ -3462,6 +3475,241 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
               </table>
             </div>}
           </div>
+
+          {/* Payments Section (入金状況) */}
+          {(()=>{
+            const invoices=dealDocs.filter(d=>d.doc_type==="invoice");
+            const totalInvoiced=invoices.reduce((s,inv)=>s+(inv.total||0),0);
+            const totalPaid=payments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+            const paidPct=totalInvoiced>0?Math.min(100,Math.round(totalPaid/totalInvoiced*100)):0;
+            const hasPayments=payments.length>0;
+            return(
+              <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span>💰 入金状況</span>
+                  <button onClick={()=>setShowPaymentForm(!showPaymentForm)} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent}30`,background:T.accent+"10",color:T.accent,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{showPaymentForm?"✕":"+ 入金記録"}</button>
+                </div>
+                {/* Payment form */}
+                {showPaymentForm&&(()=>{
+                  const[payDocId,setPayDocId]=React.useState(invoices[0]?.id||"");
+                  const[payAmt,setPayAmt]=React.useState("");
+                  const[payDate,setPayDate]=React.useState(new Date().toISOString().split("T")[0]);
+                  const[payMethod,setPayMethod]=React.useState("bank_transfer");
+                  const savePayment=async()=>{
+                    if(!payAmt)return;
+                    const{error}=await client.from("invoice_payments").insert({deal_id:deal.id,document_id:payDocId||null,amount:parseFloat(payAmt),currency:deal.currency||"USD",payment_date:payDate,payment_method:payMethod,created_by:user?.id});
+                    if(!error){
+                      const{data:py}=await client.from("invoice_payments").select("*").eq("deal_id",deal.id).order("created_at");
+                      setPayments(py||[]);setShowPaymentForm(false);
+                      // Update prepayment_percent
+                      const newTotal=(py||[]).reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+                      const newPct=totalInvoiced>0?Math.min(100,Math.round(newTotal/totalInvoiced*100)):0;
+                      await client.from("sales_deals").update({prepayment_percent:newPct,updated_at:new Date().toISOString()}).eq("id",deal.id);
+                      if(onStageChange)onStageChange(deal.id,{prepayment_percent:newPct});
+                    }else{toast("入金記録エラー: "+error.message,"error")}
+                  };
+                  return(
+                    <div style={{padding:8,background:T.bg,borderRadius:6,marginBottom:8,display:"flex",flexDirection:"column",gap:6}}>
+                      {invoices.length>0&&<select value={payDocId} onChange={e=>setPayDocId(e.target.value)} style={{padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
+                        <option value="">請求書を選択</option>
+                        {invoices.map(inv=><option key={inv.id} value={inv.id}>{inv.doc_number} ({inv.currency||"USD"} {(inv.total||0).toLocaleString()})</option>)}
+                      </select>}
+                      <div style={{display:"flex",gap:4}}>
+                        <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} placeholder="金額" style={{flex:1,padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}/>
+                        <input type="date" value={payDate} onChange={e=>setPayDate(e.target.value)} style={{padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}/>
+                      </div>
+                      <div style={{display:"flex",gap:4}}>
+                        <select value={payMethod} onChange={e=>setPayMethod(e.target.value)} style={{flex:1,padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
+                          <option value="bank_transfer">銀行振込</option><option value="wise">Wise</option><option value="paypal">PayPal</option><option value="other">その他</option>
+                        </select>
+                        <button onClick={savePayment} style={{padding:"4px 12px",borderRadius:4,border:"none",background:T.accent,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>保存</button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {/* Payment list */}
+                {hasPayments?invoices.map(inv=>{
+                  const invPayments=payments.filter(p=>p.document_id===inv.id);
+                  const invPaid=invPayments.reduce((s,p)=>s+(parseFloat(p.amount)||0),0);
+                  return(
+                    <div key={inv.id} style={{marginBottom:6}}>
+                      <div style={{fontSize:10,fontWeight:600,color:T.text}}>{inv.doc_number} {inv.currency||"USD"} {(inv.total||0).toLocaleString()}</div>
+                      {invPayments.map(p=>(
+                        <div key={p.id} style={{fontSize:9,color:T.sub,paddingLeft:10,display:"flex",gap:4}}>
+                          <span>└</span><span>{p.currency||"USD"} {parseFloat(p.amount).toLocaleString()}</span>
+                          <span style={{color:T.muted}}>{p.payment_date}</span>
+                          <span style={{color:T.muted}}>{p.payment_method==="bank_transfer"?"振込":p.payment_method==="wise"?"Wise":p.payment_method}</span>
+                        </div>
+                      ))}
+                      {invPayments.length===0&&<div style={{fontSize:9,color:T.muted,paddingLeft:10}}>└ 入金記録なし</div>}
+                    </div>
+                  );
+                }):(
+                  !hasPayments&&invoices.length===0?<div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"4px 0"}}>請求書がまだありません</div>:
+                  <div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"4px 0"}}>入金記録なし (従来: {deal.prepayment_percent||0}%)</div>
+                )}
+                {/* Total bar */}
+                {totalInvoiced>0&&<div style={{marginTop:6,padding:"4px 0",borderTop:`1px solid ${T.borderLight}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:9,color:T.muted}}>合計</span>
+                    <div style={{flex:1,height:5,background:"#e5e5e5",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{width:paidPct+"%",height:"100%",background:paidPct>=100?T.green||"#22c55e":paidPct>0?"#f59e0b":"#e5e5e5",transition:"width .3s",borderRadius:3}}/>
+                    </div>
+                    <span style={{fontSize:10,fontWeight:700,color:paidPct>=100?T.green||"#22c55e":T.text}}>{paidPct}%</span>
+                  </div>
+                  <div style={{fontSize:9,color:T.muted,textAlign:"right"}}>{deal.currency||"USD"} {totalPaid.toLocaleString()} / {totalInvoiced.toLocaleString()}</div>
+                </div>}
+              </div>
+            );
+          })()}
+
+          {/* Shipments Section (出荷) */}
+          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>🚚 出荷 ({shipments.length})</span>
+              <button onClick={()=>setShowShipmentForm(!showShipmentForm)} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent}30`,background:T.accent+"10",color:T.accent,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{showShipmentForm?"✕":"+ 出荷を作成"}</button>
+            </div>
+            {/* Shipment creation form */}
+            {showShipmentForm&&(()=>{
+              const[selItems,setSelItems]=React.useState({});
+              const[shipCarrier,setShipCarrier]=React.useState("");
+              const[shipNotes,setShipNotes]=React.useState("");
+              const remaining=orderItems.map(it=>({...it,remaining:it.quantity-(it.shipped_quantity||0)})).filter(it=>it.remaining>0);
+              const createShipment=async()=>{
+                const selected=Object.entries(selItems).filter(([_,qty])=>qty>0).map(([id,qty])=>({order_item_id:id,quantity:parseInt(qty)}));
+                if(selected.length===0){toast("出荷品目を選択してください","error");return}
+                // Generate shipment number
+                const shipNum=`SHP-${(deal.name||"").replace(/[^a-zA-Z0-9]/g,"").slice(0,8)}-${(shipments.length+1)}`;
+                const{data:sh,error:se}=await client.from("shipments").insert({deal_id:deal.id,account_id:deal.account_id,shipment_number:shipNum,carrier:shipCarrier||null,notes:shipNotes||null,created_by:user?.id}).select("id").single();
+                if(se){toast("出荷作成エラー: "+se.message,"error");return}
+                // Create shipment_items
+                const siRows=selected.map(s=>({shipment_id:sh.id,order_item_id:s.order_item_id,quantity:s.quantity}));
+                const{error:sie}=await client.from("shipment_items").insert(siRows);
+                if(sie){toast("出荷品目エラー: "+sie.message,"error");return}
+                // Update shipped_quantity on order_items
+                for(const s of selected){
+                  const item=orderItems.find(i=>i.id===s.order_item_id);
+                  if(item){
+                    const newShipped=(item.shipped_quantity||0)+s.quantity;
+                    await client.from("order_items").update({shipped_quantity:newShipped}).eq("id",s.order_item_id);
+                  }
+                }
+                // Reload
+                const[{data:newSh},{data:newOi}]=await Promise.all([
+                  client.from("shipments").select("*").eq("deal_id",deal.id).order("created_at"),
+                  client.from("order_items").select("*").eq("deal_id",deal.id).order("created_at")
+                ]);
+                setShipments(newSh||[]);setOrderItems(newOi||[]);setShowShipmentForm(false);
+                toast(`出荷 ${shipNum} を作成しました`,"success");
+              };
+              return(
+                <div style={{padding:8,background:T.bg,borderRadius:6,marginBottom:8}}>
+                  <div style={{fontSize:10,fontWeight:600,color:T.text,marginBottom:6}}>出荷品目を選択</div>
+                  {remaining.length===0?<div style={{fontSize:10,color:T.muted}}>全品目が出荷済みです</div>:
+                  <div style={{maxHeight:160,overflowY:"auto"}}>
+                    {remaining.map(it=>(
+                      <div key={it.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:`1px solid ${T.borderLight}`,fontSize:10}}>
+                        <input type="checkbox" checked={!!selItems[it.id]} onChange={e=>{setSelItems(p=>e.target.checked?{...p,[it.id]:it.remaining}:{...p,[it.id]:0})}} style={{width:12,height:12}}/>
+                        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name_en||it.name_ja}</span>
+                        <input type="number" min={0} max={it.remaining} value={selItems[it.id]||""} onChange={e=>setSelItems(p=>({...p,[it.id]:Math.min(it.remaining,parseInt(e.target.value)||0)}))} style={{width:50,padding:"2px 4px",border:`1px solid ${T.border}`,borderRadius:3,fontSize:10,textAlign:"center",fontFamily:"inherit"}} placeholder={it.remaining}/>
+                        <span style={{fontSize:9,color:T.muted,whiteSpace:"nowrap"}}>/ {it.remaining}残</span>
+                      </div>
+                    ))}
+                  </div>}
+                  <div style={{display:"flex",gap:4,marginTop:6}}>
+                    <input value={shipCarrier} onChange={e=>setShipCarrier(e.target.value)} placeholder="配送業者 (FedEx等)" style={{flex:1,padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}/>
+                    <button onClick={createShipment} style={{padding:"4px 12px",borderRadius:4,border:"none",background:T.accent,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>作成</button>
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Shipment list */}
+            {shipments.length===0?<div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"4px 0"}}>出荷データなし</div>:
+            shipments.map(sh=>{
+              const stColor=sh.status==="shipped"?"#22c55e":sh.status==="delivered"?"#14b8a6":"#f59e0b";
+              const stLabel=sh.status==="shipped"?"発送済":sh.status==="delivered"?"配達完了":"梱包中";
+              return(
+                <div key={sh.id} style={{padding:"6px 0",borderBottom:`1px solid ${T.borderLight}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10.5}}>
+                    <span style={{fontWeight:700,color:T.text}}>{sh.shipment_number}</span>
+                    {sh.carrier&&<span style={{fontSize:9,color:T.muted}}>{sh.carrier}</span>}
+                    <span style={{padding:"1px 6px",borderRadius:3,background:stColor+"15",color:stColor,fontSize:8,fontWeight:700}}>{stLabel}</span>
+                    <div style={{flex:1}}/>
+                    <select value={sh.status} onChange={async(e)=>{
+                      const ns=e.target.value;
+                      const upd={status:ns};if(ns==="shipped"&&!sh.shipped_date)upd.shipped_date=new Date().toISOString().split("T")[0];
+                      await client.from("shipments").update(upd).eq("id",sh.id);
+                      setShipments(prev=>prev.map(s=>s.id===sh.id?{...s,...upd}:s));
+                    }} style={{padding:"1px 4px",border:"none",borderRadius:3,fontSize:9,fontWeight:600,fontFamily:"inherit",cursor:"pointer",background:stColor+"20",color:stColor}}>
+                      <option value="packing">梱包中</option><option value="shipped">発送済</option><option value="delivered">配達完了</option>
+                    </select>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,fontSize:9}}>
+                    {sh.tracking_number?<span style={{color:T.accent,fontWeight:600}}>{sh.tracking_number}</span>:
+                    <input placeholder="追跡番号を入力" onBlur={async(e)=>{
+                      const v=e.target.value.trim();if(!v)return;
+                      await client.from("shipments").update({tracking_number:v}).eq("id",sh.id);
+                      setShipments(prev=>prev.map(s=>s.id===sh.id?{...s,tracking_number:v}:s));
+                    }} style={{padding:"2px 6px",border:`1px solid ${T.border}`,borderRadius:3,fontSize:9,fontFamily:"inherit",width:120}}/>}
+                    {sh.shipped_date&&<span style={{color:T.muted}}>{sh.shipped_date}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Credit Notes Section (クレジットノート) - only when relevant */}
+          {(stageObj?.phase==="post"||stageObj?.phase==="done"||creditNotes.length>0)&&(
+            <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>📋 クレジットノート ({creditNotes.length})</span>
+                <button onClick={()=>setShowCreditForm(!showCreditForm)} style={{padding:"2px 8px",borderRadius:4,border:"1px solid #ef444430",background:"#ef444410",color:"#ef4444",fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{showCreditForm?"✕":"+ 作成"}</button>
+              </div>
+              {showCreditForm&&(()=>{
+                const invoices=dealDocs.filter(d=>d.doc_type==="invoice");
+                const[cnDocId,setCnDocId]=React.useState(invoices[0]?.id||"");
+                const[cnAmt,setCnAmt]=React.useState("");
+                const[cnReason,setCnReason]=React.useState("damage");
+                const saveCN=async()=>{
+                  if(!cnAmt)return;
+                  const cnNum=`CN-${(deal.name||"").replace(/[^a-zA-Z0-9]/g,"").slice(0,8)}-${(creditNotes.length+1)}`;
+                  const{error}=await client.from("credit_notes").insert({deal_id:deal.id,original_document_id:cnDocId||null,credit_number:cnNum,amount:parseFloat(cnAmt),currency:deal.currency||"USD",reason:cnReason,status:"issued",created_by:user?.id});
+                  if(!error){
+                    const{data:cn}=await client.from("credit_notes").select("*").eq("deal_id",deal.id).order("created_at");
+                    setCreditNotes(cn||[]);setShowCreditForm(false);
+                    toast(`クレジットノート ${cnNum} を作成しました`,"success");
+                  }else{toast("エラー: "+error.message,"error")}
+                };
+                return(
+                  <div style={{padding:8,background:T.bg,borderRadius:6,marginBottom:8,display:"flex",flexDirection:"column",gap:6}}>
+                    {invoices.length>0&&<select value={cnDocId} onChange={e=>setCnDocId(e.target.value)} style={{padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
+                      <option value="">元の請求書</option>
+                      {invoices.map(inv=><option key={inv.id} value={inv.id}>{inv.doc_number}</option>)}
+                    </select>}
+                    <div style={{display:"flex",gap:4}}>
+                      <input type="number" value={cnAmt} onChange={e=>setCnAmt(e.target.value)} placeholder="返金額" style={{flex:1,padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}/>
+                      <select value={cnReason} onChange={e=>setCnReason(e.target.value)} style={{padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
+                        <option value="damage">破損</option><option value="shortage">不足</option><option value="error">誤送</option><option value="return">返品</option>
+                      </select>
+                    </div>
+                    <button onClick={saveCN} style={{padding:"4px 12px",borderRadius:4,border:"none",background:"#ef4444",color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",alignSelf:"flex-end"}}>発行</button>
+                  </div>
+                );
+              })()}
+              {creditNotes.length===0?<div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"4px 0"}}>クレジットノートなし</div>:
+              creditNotes.map(cn=>{
+                const reasonLabel={damage:"破損",shortage:"不足",error:"誤送",return:"返品"}[cn.reason]||cn.reason;
+                return(
+                  <div key={cn.id} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:`1px solid ${T.borderLight}`,fontSize:10}}>
+                    <span style={{fontWeight:700,color:"#ef4444"}}>{cn.credit_number}</span>
+                    <span style={{color:T.text}}>-{cn.currency||"USD"} {parseFloat(cn.amount).toLocaleString()}</span>
+                    <span style={{padding:"1px 5px",borderRadius:3,background:"#ef444415",color:"#ef4444",fontSize:8,fontWeight:600}}>{reasonLabel}</span>
+                    <span style={{padding:"1px 5px",borderRadius:3,background:cn.status==="issued"?"#22c55e15":"#f59e0b15",color:cn.status==="issued"?"#22c55e":"#f59e0b",fontSize:8,fontWeight:600}}>{cn.status==="issued"?"発行済":"下書き"}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Center: Timeline */}
@@ -6496,6 +6744,98 @@ return(
 }
 
 
+// ── Regenerate Document Excel (再ダウンロード用) ──
+async function regenerateDocExcel(doc){
+  if(!window.ExcelJS){
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+    document.head.appendChild(s);
+    await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(new Error("ExcelJS読み込み失敗"))});
+  }
+  const ci=doc.client_info||{};
+  const isInvoice=doc.doc_type==="invoice";
+  const title=isInvoice?"I N V O I C E":"Q U O T A T I O N";
+  const fmtDate=(dateStr)=>{if(!dateStr)return"";const d=new Date(dateStr);const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];const day=d.getDate();const suffix=day===1||day===21||day===31?"st":day===2||day===22?"nd":day===3||day===23?"rd":"th";return`${day}${suffix}, ${months[d.getMonth()]}, ${d.getFullYear()}`};
+  const docDate=ci.doc_date||doc.created_at?.split("T")[0]||"";
+  const dueDate=ci.due_date||"";
+  const dueLine=isInvoice?`Payment Due By: ${fmtDate(dueDate)}`:`Quote Valid Until: ${fmtDate(dueDate)}`;
+  const docLabel=isInvoice?"Invoice Number:":"Quotation Number:";
+  const toLabel=isInvoice?"B I L L  T O":"S H I P  T O";
+  const fromCompany="Global Stride Inc.";
+  const toCompany=ci.companyName||"";
+  const toAddr=ci.address||"";
+  const toCityCountry=ci.country||"";
+  const toPhone=ci.phone||"";
+  const docItems=doc.items||[];
+  const shippingCost=doc.shipping||0;
+  const incoterm=doc.incoterm||"DAP";
+  const docNotes=doc.notes||"";
+
+  const wb=new window.ExcelJS.Workbook();
+  const ws=wb.addWorksheet("Invoice");
+  ws.columns=[{width:5},{width:22},{width:18},{width:14},{width:16},{width:12},{width:14},{width:12}];
+  const fontB={name:"Arial",size:10,bold:true,color:{argb:"FF000000"}};
+  const fontN={name:"Arial",size:10,color:{argb:"FF000000"}};
+  const fontGray={name:"Arial",size:10,bold:true,color:{argb:"FF888888"}};
+  const fontWhite={name:"Arial",size:10,bold:true,color:{argb:"FFFFFFFF"}};
+  const thinBorder={top:{style:"thin"},bottom:{style:"thin"},left:{style:"thin"},right:{style:"thin"}};
+  const blackFill={type:"pattern",pattern:"solid",fgColor:{argb:"FF000000"}};
+  const grayFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2F2F2"}};
+  const whiteFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFFFF"}};
+  const bankFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF8F8F8"}};
+  const mergeSet=(r,c1,c2,val,font,align,fill,border)=>{if(c1!==c2)ws.mergeCells(r,c1,r,c2);const cell=ws.getCell(r,c1);cell.value=val;cell.font=font||fontN;cell.alignment={horizontal:align||"left",vertical:"center"};if(fill)cell.fill=fill;if(border)cell.border=border};
+
+  ws.getRow(1).height=36;[2,3].forEach(r=>ws.getRow(r).height=18);ws.getRow(4).height=6;ws.getRow(5).height=12;ws.getRow(6).height=19.5;[7,8,9,10,11].forEach(r=>ws.getRow(r).height=18);ws.getRow(12).height=15.75;
+  mergeSet(1,1,3,title,{name:"Arial",size:24,bold:true,color:{argb:"FF000000"}},"left");
+  mergeSet(1,6,8,`Date: ${fmtDate(docDate)}`,fontB,"right");
+  mergeSet(2,6,8,dueLine,fontB,"right");
+  mergeSet(3,6,8,`${docLabel} ${doc.doc_number}`,fontB,"right");
+  mergeSet(6,1,4,"F R O M",fontGray);mergeSet(6,5,8,toLabel,fontGray);
+  mergeSet(7,1,4,`Company Name: ${fromCompany}`,fontB);mergeSet(7,5,8,`Company Name: ${toCompany}`,fontB);
+  mergeSet(8,1,4,"Street Address: 6A 4-5-11 Ueshio Tennoji-ku,",fontB);mergeSet(8,5,8,`Street Address: ${toAddr}`,fontB);
+  mergeSet(9,1,4,"                    Osaka-shi, Osaka-fu 543-0002",fontN);mergeSet(9,5,8,`                    ${toCityCountry}`,fontN);
+  mergeSet(10,1,4,"                    Japan",fontN);mergeSet(10,5,8,toPhone?`Phone: ${toPhone}`:"",fontB);
+  mergeSet(11,1,4,"Phone: +81 50-1808-6320",fontB);
+
+  const hRow=13;ws.getRow(hRow).height=27.75;
+  [[1,3,"Description"],[4,4,"JAN"],[5,5,"Quantity"],[6,7,"Unit Price"],[8,8,"Amount"]].forEach(([c1,c2,val])=>{mergeSet(hRow,c1,c2,val,fontWhite,"center",blackFill,thinBorder)});
+  const dataStart=14;
+  docItems.forEach((item,i)=>{
+    const r=dataStart+i;const bg=i%2===0?grayFill:whiteFill;ws.getRow(r).height=31.5;
+    mergeSet(r,1,3,item.name_en||item.name_ja||"",fontN,"left",bg,thinBorder);
+    const janCell=ws.getCell(r,4);janCell.value=item.jan||"";janCell.font=fontN;janCell.alignment={horizontal:"center",vertical:"center"};janCell.fill=bg;janCell.border=thinBorder;
+    const qtyCell=ws.getCell(r,5);qtyCell.value=item.quantity;qtyCell.font=fontN;qtyCell.alignment={horizontal:"center",vertical:"center"};qtyCell.fill=bg;qtyCell.border=thinBorder;
+    mergeSet(r,6,7,item.selling_price,fontN,"center",bg,thinBorder);
+    const amtCell=ws.getCell(r,8);amtCell.value={formula:`E${r}*F${r}`};amtCell.font=fontB;amtCell.alignment={horizontal:"right",vertical:"center"};amtCell.fill=bg;amtCell.border=thinBorder;
+  });
+  const lastItem=dataStart+docItems.length-1;const gapRow=lastItem+2;
+  ws.getRow(lastItem+1).height=9.75;ws.getRow(gapRow).height=24;
+  ws.mergeCells(gapRow,4,gapRow,6);ws.getCell(gapRow,4).value="Sub Total";ws.getCell(gapRow,4).font=fontN;ws.getCell(gapRow,4).alignment={horizontal:"right",vertical:"center"};
+  ws.mergeCells(gapRow,7,gapRow,8);ws.getCell(gapRow,7).value={formula:`SUM(H${dataStart}:H${lastItem})`};ws.getCell(gapRow,7).font=fontB;ws.getCell(gapRow,7).alignment={horizontal:"right",vertical:"center"};
+  ws.getRow(gapRow+1).height=24;
+  ws.mergeCells(gapRow+1,4,gapRow+1,6);ws.getCell(gapRow+1,4).value="Shipping Cost";ws.getCell(gapRow+1,4).font=fontN;ws.getCell(gapRow+1,4).alignment={horizontal:"right",vertical:"center"};
+  ws.mergeCells(gapRow+1,7,gapRow+1,8);ws.getCell(gapRow+1,7).value=shippingCost;ws.getCell(gapRow+1,7).font=fontB;ws.getCell(gapRow+1,7).alignment={horizontal:"right",vertical:"center"};
+  ws.getRow(gapRow+2).height=30;
+  ws.mergeCells(gapRow+2,4,gapRow+2,6);const totalLabel=ws.getCell(gapRow+2,4);totalLabel.value="Total Amount";totalLabel.font=fontWhite;totalLabel.alignment={horizontal:"right",vertical:"center"};totalLabel.fill=blackFill;totalLabel.border=thinBorder;
+  ws.mergeCells(gapRow+2,7,gapRow+2,8);const totalVal=ws.getCell(gapRow+2,7);totalVal.value={formula:`G${gapRow}+G${gapRow+1}`};totalVal.font={name:"Arial",size:12,bold:true,color:{argb:"FF000000"}};totalVal.alignment={horizontal:"right",vertical:"center"};totalVal.border=thinBorder;
+  let curRow=gapRow+4;
+  if(isInvoice){
+    const bankRows=[`Bank Name: Wise`,`Account Holder's Name: ${fromCompany}`,`Bank Account Number: `,`Routing Number: `,`Bank Address: `];
+    bankRows.forEach((txt,i)=>{const r=curRow+i;ws.getRow(r).height=19.5;ws.mergeCells(r,1,r,8);const c=ws.getCell(r,1);c.value=txt;c.font=i===0?fontB:fontN;c.alignment={horizontal:"left",vertical:"center"};c.fill=bankFill;c.border=thinBorder});
+    curRow+=6;
+  }
+  const incoLabels={DAP:"DAP (Delivered At Place)",FOB:"FOB (Free On Board)",CIF:"CIF (Cost Insurance Freight)",EXW:"EXW (Ex Works)",DDP:"DDP (Delivered Duty Paid)"};
+  const incoDesc={DAP:"The seller (Global Stride Inc.) will arrange and pay for transportation to the buyer's specified address. However, any import duties, taxes, and customs clearance procedures that occur upon importation are the responsibility of the buyer.",FOB:"The seller (Global Stride Inc.) is responsible for delivering the goods to the port of shipment and loading them onto the vessel. Risk transfers to the buyer once the goods are on board.",CIF:"The seller (Global Stride Inc.) pays for cost, insurance, and freight to bring goods to the port of destination. Risk transfers to the buyer once the goods are on board at the port of shipment.",EXW:"The buyer is responsible for all transportation costs and risks from the seller's premises.",DDP:"The seller (Global Stride Inc.) is responsible for delivering the goods to the buyer's premises, including all import duties, taxes, and customs clearance."};
+  ws.getRow(curRow).height=21.75;ws.mergeCells(curRow,1,curRow,8);ws.getCell(curRow,1).value=`Delivery Terms: ${incoLabels[incoterm]||incoterm}`;ws.getCell(curRow,1).font=fontB;curRow++;
+  ws.getRow(curRow).height=36;ws.mergeCells(curRow,1,curRow,8);const descCell=ws.getCell(curRow,1);descCell.value=incoDesc[incoterm]||"";descCell.font={name:"Arial",size:9,color:{argb:"FF000000"}};descCell.alignment={horizontal:"left",vertical:"top",wrapText:true};curRow+=2;
+  ws.getRow(curRow).height=18;ws.mergeCells(curRow,1,curRow,8);ws.getCell(curRow,1).value="Remarks";ws.getCell(curRow,1).font=fontB;curRow++;
+  ws.getRow(curRow).height=18;ws.mergeCells(curRow,1,curRow,8);ws.getCell(curRow,1).value=docNotes;ws.getCell(curRow,1).font=fontB;
+  const buf=await wb.xlsx.writeBuffer();
+  const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=`${doc.doc_number}.xlsx`;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+
 // ── Document List View (書類一覧) ──
 function DocumentListView({client,user,accounts,deals,onBack,onCreateInvoice,onOpenDeal}){
 const IS_MOBILE=window.innerWidth<768;
@@ -6504,6 +6844,8 @@ const[loading,setLoading]=useState(true);
 const[filterType,setFilterType]=useState("all");
 const[searchText,setSearchText]=useState("");
 const[syncing,setSyncing]=useState({});
+const[confirmDeleteId,setConfirmDeleteId]=useState(null);
+const[downloading,setDownloading]=useState({});
 
 useEffect(()=>{loadDocs()},[]);
 const loadDocs=async()=>{
@@ -6511,6 +6853,24 @@ const loadDocs=async()=>{
   const{data,error}=await client.from("generated_documents").select("*").order("created_at",{ascending:false}).limit(500);
   if(!error&&data)setDocs(data);
   setLoading(false);
+};
+
+const deleteDoc=async(docId)=>{
+  if(confirmDeleteId!==docId){setConfirmDeleteId(docId);setTimeout(()=>setConfirmDeleteId(prev=>prev===docId?null:prev),5000);return}
+  try{
+    const{error}=await client.from("generated_documents").delete().eq("id",docId);
+    if(error)throw error;
+    setDocs(prev=>prev.filter(d=>d.id!==docId));
+    setConfirmDeleteId(null);
+    toast("書類を削除しました","success");
+  }catch(err){toast("削除エラー: "+err.message,"error")}
+};
+
+const downloadDoc=async(doc)=>{
+  if(doc.doc_type==="delivery"){toast("納品書の再ダウンロードは未対応です","info");return}
+  setDownloading(p=>({...p,[doc.id]:true}));
+  try{await regenerateDocExcel(doc);toast("ダウンロード完了","success")}catch(err){toast("ダウンロードエラー: "+err.message,"error")}
+  finally{setDownloading(p=>({...p,[doc.id]:false}))}
 };
 
 const accountMap=useMemo(()=>{
@@ -6622,9 +6982,13 @@ return(
               {!IS_MOBILE&&<td style={{padding:"10px 10px",textAlign:"center",fontWeight:600}}>{itemCount}</td>}
               <td style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</td>
               {!IS_MOBILE&&<td style={{padding:"10px 10px",textAlign:"center",fontSize:10,color:T.muted}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</td>}
-              <td style={{padding:"10px 14px",textAlign:"right"}}>
-                {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"3px 10px",borderRadius:4,border:`1px solid ${T.accent||"#2d8cf0"}`,background:"transparent",color:T.accent||"#2d8cf0",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
-                {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"3px 10px",borderRadius:4,border:`1px solid ${doc.deal_id?T.green||"#22c55e":T.border}`,background:"transparent",color:doc.deal_id?T.green||"#22c55e":T.muted,fontSize:10,fontWeight:600,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,fontFamily:"inherit"}}>{isSyncing?"...":"発注反映"}</button>}
+              <td style={{padding:"10px 14px",textAlign:"right",whiteSpace:"nowrap"}}>
+                <div style={{display:"flex",gap:4,justifyContent:"flex-end",alignItems:"center"}}>
+                  {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"3px 10px",borderRadius:4,border:`1px solid ${T.accent||"#2d8cf0"}`,background:"transparent",color:T.accent||"#2d8cf0",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
+                  {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"3px 10px",borderRadius:4,border:`1px solid ${doc.deal_id?T.green||"#22c55e":T.border}`,background:"transparent",color:doc.deal_id?T.green||"#22c55e":T.muted,fontSize:10,fontWeight:600,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,fontFamily:"inherit"}}>{isSyncing?"...":"発注反映"}</button>}
+                  {doc.doc_type!=="delivery"&&<button onClick={()=>downloadDoc(doc)} disabled={downloading[doc.id]} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${T.border}`,background:"transparent",color:T.sub,fontSize:10,fontWeight:500,cursor:"pointer",fontFamily:"inherit",opacity:downloading[doc.id]?.5:1}} title="再ダウンロード">{downloading[doc.id]?"...":"📥"}</button>}
+                  <button onClick={()=>deleteDoc(doc.id)} style={{padding:"3px 8px",borderRadius:4,border:`1px solid ${confirmDeleteId===doc.id?"#ef4444":T.border}`,background:confirmDeleteId===doc.id?"#ef444415":"transparent",color:confirmDeleteId===doc.id?"#ef4444":T.muted,fontSize:10,fontWeight:confirmDeleteId===doc.id?700:500,cursor:"pointer",fontFamily:"inherit"}} title={confirmDeleteId===doc.id?"もう一度クリックで削除":"削除"}>{confirmDeleteId===doc.id?"本当に削除？":"🗑"}</button>
+                </div>
               </td>
             </tr>
           );
