@@ -812,39 +812,6 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                             onMouseLeave: (e) => { e.currentTarget.style.background = '#fff'; }
                         }, '+')
                     ),
-                    // Tab bar
-                    React.createElement('div', { style: { display: 'flex', gap: 0, borderRadius: 6, overflow: 'hidden', border: '1px solid ' + t.border } },
-                        [
-                            { id: 'group', label: 'グループ' },
-                            
-                            { id: 'deal', label: '商談' }
-                        ].map(tab => {
-                            const active = sidebarTab === tab.id;
-                            const unreadCount = (() => {
-                                if (tab.id === 'group') return Object.entries(unreadMap).filter(([rid]) => filteredGeneralRooms.some(r => r.id === rid)).reduce((s, [, c]) => s + c, 0);
-                                
-                                if (tab.id === 'deal') return Object.entries(unreadMap).filter(([rid]) => !!dealRoomMap[rid]).reduce((s, [, c]) => s + c, 0);
-                                
-                                return 0;
-                            })();
-                            return React.createElement('button', {
-                                key: tab.id,
-                                onClick: () => setSidebarTab(tab.id),
-                                style: {
-                                    flex: 1, padding: '4px 2px', border: 'none', fontSize: 10, fontWeight: 600,
-                                    cursor: 'pointer', fontFamily: 'inherit', position: 'relative',
-                                    background: active ? t.primary : '#fff',
-                                    color: active ? '#fff' : t.sub,
-                                    transition: 'all 0.15s'
-                                }
-                            },
-                                tab.label,
-                                unreadCount > 0 ? React.createElement('span', {
-                                    style: { position: 'absolute', top: -2, right: 2, background: t.red, color: '#fff', borderRadius: 6, padding: '0 3px', fontSize: 8, fontWeight: 700, minWidth: 12, textAlign: 'center', lineHeight: '14px' }
-                                }, unreadCount) : null
-                            );
-                        })
-                    )
                 ),
                 // Search
                 React.createElement('div', { style: { padding: '4px 8px' } },
@@ -855,8 +822,21 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                     })
                 ),
                 React.createElement('div', { style: { flex: 1, overflowY: 'auto', padding: '4px 6px' } },
-                    // === グループ tab (drag & drop reorder) ===
-                    sidebarTab === 'group' && React.createElement('div', null,
+                    // === グループ section ===
+                    React.createElement('div', {
+                        style: { padding: '6px 8px 3px', fontSize: 10, fontWeight: 700, color: t.muted, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' },
+                        onClick: () => setCollapsedCategories(prev => ({ ...prev, _groups: !prev._groups }))
+                    },
+                        React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+                            React.createElement('span', { style: { fontSize: 7, transition: 'transform 0.15s', transform: collapsedCategories._groups ? 'rotate(-90deg)' : 'rotate(0deg)' } }, '▼'),
+                            '# グループ'
+                        ),
+                        (() => {
+                            const groupUnread = Object.entries(unreadMap).filter(([rid]) => filteredGeneralRooms.some(r => r.id === rid)).reduce((s, [, c]) => s + c, 0);
+                            return groupUnread > 0 ? React.createElement('span', { style: { background: t.red, color: '#fff', borderRadius: 8, padding: '0 4px', fontSize: 8, fontWeight: 700, minWidth: 14, textAlign: 'center', lineHeight: '14px' } }, groupUnread) : null;
+                        })()
+                    ),
+                    !collapsedCategories._groups && React.createElement('div', null,
                         filteredGeneralRooms.map((room, idx) =>
                             React.createElement('div', {
                                 key: room.id,
@@ -897,8 +877,18 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                         ),
                         filteredGeneralRooms.length === 0 && React.createElement('p', { style: { padding: '6px 10px', color: t.muted, fontSize: 11 } }, 'グループなし')
                     ),
-                    // === 経費報告 tab ===
-                    sidebarTab === 'expense' && React.createElement('div', null,
+                    // === 経費報告 section ===
+                    filteredExpenseRooms.length > 0 && React.createElement('div', null,
+                        React.createElement('div', {
+                            style: { padding: '8px 8px 3px', fontSize: 10, fontWeight: 700, color: t.muted, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none', marginTop: 4, borderTop: '1px solid ' + t.border, paddingTop: 8 },
+                            onClick: () => setCollapsedCategories(prev => ({ ...prev, _expense: !prev._expense }))
+                        },
+                            React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+                                React.createElement('span', { style: { fontSize: 7, transition: 'transform 0.15s', transform: collapsedCategories._expense ? 'rotate(-90deg)' : 'rotate(0deg)' } }, '▼'),
+                                '📊 経費報告'
+                            )
+                        ),
+                    !collapsedCategories._expense && React.createElement('div', null,
                         filteredExpenseRooms.map(room =>
                             React.createElement('div', {
                                 key: room.id,
@@ -915,13 +905,24 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                                 }, unreadMap[room.id]) : null
                             )
                         ),
-                        filteredExpenseRooms.length === 0 && React.createElement('p', { style: { padding: '6px 10px', color: t.muted, fontSize: 11 } }, '経費報告グループなし')
-                    ),
-                    // === 商談 tab ===
-                    sidebarTab === 'deal' && (() => {
-                        if (dealRoomsByCategory.all.length === 0) return React.createElement('p', { style: { padding: '6px 10px', color: t.muted, fontSize: 11 } }, '商談チャットなし');
+                    )),
+                    // === 商談 section ===
+                    (() => {
+                        if (dealRoomsByCategory.all.length === 0) return null;
                         const toggleCat = (catId) => setCollapsedCategories(prev => ({ ...prev, [catId]: !prev[catId] }));
-                        return React.createElement('div', null,
+                        const dealUnread = Object.entries(unreadMap).filter(([rid]) => !!dealRoomMap[rid]).reduce((s, [, c]) => s + c, 0);
+                        return React.createElement('div', { style: { marginTop: 4, borderTop: '1px solid ' + t.border, paddingTop: 4 } },
+                            React.createElement('div', {
+                                style: { padding: '6px 8px 3px', fontSize: 10, fontWeight: 700, color: t.muted, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' },
+                                onClick: () => setCollapsedCategories(prev => ({ ...prev, _deals: !prev._deals }))
+                            },
+                                React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
+                                    React.createElement('span', { style: { fontSize: 7, transition: 'transform 0.15s', transform: collapsedCategories._deals ? 'rotate(-90deg)' : 'rotate(0deg)' } }, '▼'),
+                                    '💼 商談'
+                                ),
+                                dealUnread > 0 ? React.createElement('span', { style: { background: t.red, color: '#fff', borderRadius: 8, padding: '0 4px', fontSize: 8, fontWeight: 700, minWidth: 14, textAlign: 'center', lineHeight: '14px' } }, dealUnread) : null
+                            ),
+                            !collapsedCategories._deals && React.createElement('div', null,
                             filteredDealGroups.map(group =>
                                 React.createElement('div', { key: group.id, style: { marginTop: 2 } },
                                     React.createElement('div', {
@@ -959,26 +960,35 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                                     })
                                 )
                             )
+                        )
                         );
                     })(),
-                    // === DM tab ===
-                    sidebarTab === 'dm' && React.createElement('div', null,
-                        filteredDmRooms.map(room =>
-                            React.createElement('div', {
-                                key: room.id,
-                                style: S.roomItem(currentRoom?.id === room.id),
-                                onClick: () => selectRoom(room),
-                                onMouseEnter: (e) => { if (currentRoom?.id !== room.id) e.currentTarget.style.background = t.bg; },
-                                onMouseLeave: (e) => { if (currentRoom?.id !== room.id) e.currentTarget.style.background = 'transparent'; }
-                            },
-                                React.createElement('span', { style: { display: 'inline-flex', flexShrink: 0 } }, React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.3 }, React.createElement('circle', { cx: 8, cy: 5, r: 3 }), React.createElement('path', { d: 'M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6', strokeLinecap: 'round' }))),
-                                React.createElement('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, dmDisplayName(room)),
-                                unreadMap[room.id] ? React.createElement('span', {
-                                    style: { background: t.red, color: '#fff', borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 700, minWidth: 16, textAlign: 'center' }
-                                }, unreadMap[room.id]) : null
-                            )
+                    // === DM section ===
+                    filteredDmRooms.length > 0 && React.createElement('div', { style: { marginTop: 4, borderTop: '1px solid ' + t.border, paddingTop: 4 } },
+                        React.createElement('div', {
+                            style: { padding: '6px 8px 3px', fontSize: 10, fontWeight: 700, color: t.muted, letterSpacing: '0.5px', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', userSelect: 'none' },
+                            onClick: () => setCollapsedCategories(prev => ({ ...prev, _dm: !prev._dm }))
+                        },
+                            React.createElement('span', { style: { fontSize: 7, transition: 'transform 0.15s', transform: collapsedCategories._dm ? 'rotate(-90deg)' : 'rotate(0deg)' } }, '▼'),
+                            '👤 DM'
                         ),
-                        filteredDmRooms.length === 0 && React.createElement('p', { style: { padding: '6px 10px', color: t.muted, fontSize: 11 } }, 'DMなし')
+                        !collapsedCategories._dm && React.createElement('div', null,
+                            filteredDmRooms.map(room =>
+                                React.createElement('div', {
+                                    key: room.id,
+                                    style: S.roomItem(currentRoom?.id === room.id),
+                                    onClick: () => selectRoom(room),
+                                    onMouseEnter: (e) => { if (currentRoom?.id !== room.id) e.currentTarget.style.background = t.bg; },
+                                    onMouseLeave: (e) => { if (currentRoom?.id !== room.id) e.currentTarget.style.background = 'transparent'; }
+                                },
+                                    React.createElement('span', { style: { display: 'inline-flex', flexShrink: 0 } }, React.createElement('svg', { width: 14, height: 14, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.3 }, React.createElement('circle', { cx: 8, cy: 5, r: 3 }), React.createElement('path', { d: 'M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6', strokeLinecap: 'round' }))),
+                                    React.createElement('span', { style: { flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, dmDisplayName(room)),
+                                    unreadMap[room.id] ? React.createElement('span', {
+                                        style: { background: t.red, color: '#fff', borderRadius: 10, padding: '1px 5px', fontSize: 9, fontWeight: 700, minWidth: 16, textAlign: 'center' }
+                                    }, unreadMap[room.id]) : null
+                                )
+                            )
+                        )
                     )
                 ),
                 // Footer
