@@ -6472,40 +6472,49 @@ return(
     </div>
   </div>
 
-  {/* Document List */}
-  <div style={{flex:1,overflowY:"auto",padding:"8px 16px"}}>
-    {filtered.length===0&&<div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>書類がありません</div>}
-    {filtered.map(doc=>{
-      const dealObj=doc.deal_id?dealMap[doc.deal_id]:null;
-      const acctName=doc.account_id?accountMap[doc.account_id]:doc.client_info?.companyName||"—";
-      const itemCount=doc.items?.length||0;
-      const isSyncing=syncing[doc.id];
-      const d=new Date(doc.created_at);
-      const dateStr=d.toLocaleDateString("ja-JP");
-      const tc=typeColor(doc.doc_type);
-      const tl=typeLabel(doc.doc_type);
-      const initial=acctName?acctName.charAt(0).toUpperCase():"?";
-      return(
-        <div key={doc.id} style={{padding:"12px 14px",marginBottom:6,background:T.card,borderRadius:8,border:`1px solid ${T.borderLight}`,display:"flex",gap:10,alignItems:"flex-start"}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:tc+"18",color:tc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{initial}</div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
-              <span style={{padding:"1px 6px",borderRadius:8,fontSize:9.5,fontWeight:600,background:tc+"12",color:tc}}>{tl}</span>
-              <span style={{fontSize:12,fontWeight:600,color:T.primary}}>{acctName}</span>
-              <span style={{fontSize:10,color:T.muted}}>{dateStr}</span>
-            </div>
-            <div style={{fontSize:12,color:T.sub,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.doc_number||"番号なし"}</div>
-            {dealObj&&<div style={{fontSize:11,color:T.muted,marginBottom:2}}>{dealObj.name}</div>}
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <span style={{fontSize:15,fontWeight:700,color:T.primary}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</span>
-              <span style={{fontSize:10,color:T.muted,background:"#f3f3f3",padding:"1px 6px",borderRadius:4}}>{itemCount}品目</span>
-              {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent||"#2d8cf0"}`,background:"transparent",color:T.accent||"#2d8cf0",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
-              {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${doc.deal_id?T.green||"#22c55e":T.border}`,background:"transparent",color:doc.deal_id?T.green||"#22c55e":T.muted,fontSize:10,fontWeight:600,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,fontFamily:"inherit"}}>{isSyncing?"...":"発注反映"}</button>}
-            </div>
-          </div>
-        </div>
-      );
-    })}
+  {/* Document Table */}
+  <div style={{flex:1,overflowY:"auto"}}>
+    {filtered.length===0?<div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>書類がありません</div>:
+    <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+      <thead>
+        <tr style={{background:T.bg,borderBottom:`1px solid ${T.border}`,position:"sticky",top:0,zIndex:2}}>
+          <th style={{padding:"8px 14px",textAlign:"left",fontSize:10,fontWeight:700,color:T.muted,letterSpacing:"0.3px"}}>種別</th>
+          <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:T.muted}}>書類番号</th>
+          <th style={{padding:"8px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:T.muted}}>取引先</th>
+          {!IS_MOBILE&&<th style={{padding:"8px 10px",textAlign:"left",fontSize:10,fontWeight:700,color:T.muted}}>商談</th>}
+          {!IS_MOBILE&&<th style={{padding:"8px 10px",textAlign:"center",fontSize:10,fontWeight:700,color:T.muted}}>品目</th>}
+          <th style={{padding:"8px 10px",textAlign:"right",fontSize:10,fontWeight:700,color:T.muted}}>金額</th>
+          {!IS_MOBILE&&<th style={{padding:"8px 10px",textAlign:"center",fontSize:10,fontWeight:700,color:T.muted}}>作成日</th>}
+          <th style={{padding:"8px 14px",textAlign:"right",fontSize:10,fontWeight:700,color:T.muted}}>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filtered.map((doc,i)=>{
+          const dealObj=doc.deal_id?dealMap[doc.deal_id]:null;
+          const acctName=doc.account_id?accountMap[doc.account_id]:doc.client_info?.companyName||"—";
+          const itemCount=doc.items?.length||0;
+          const isSyncing=syncing[doc.id];
+          const tc=typeColor(doc.doc_type);
+          return(
+            <tr key={doc.id} style={{borderBottom:`1px solid ${T.border}`,background:i%2===0?"transparent":T.bg+"80"}}
+              onMouseEnter={e=>e.currentTarget.style.background=(T.accent||"#2d8cf0")+"05"}
+              onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"transparent":T.bg+"80"}>
+              <td style={{padding:"10px 14px"}}><span style={{padding:"2px 8px",borderRadius:4,background:tc+"15",color:tc,fontSize:9,fontWeight:700}}>{typeLabel(doc.doc_type)}</span></td>
+              <td style={{padding:"10px 10px",fontWeight:600,color:T.text,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.doc_number||"番号なし"}</td>
+              <td style={{padding:"10px 10px",color:T.sub}}>{acctName}</td>
+              {!IS_MOBILE&&<td style={{padding:"10px 10px",color:dealObj?T.text:T.muted,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dealObj?dealObj.name:"—"}</td>}
+              {!IS_MOBILE&&<td style={{padding:"10px 10px",textAlign:"center",fontWeight:600}}>{itemCount}</td>}
+              <td style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</td>
+              {!IS_MOBILE&&<td style={{padding:"10px 10px",textAlign:"center",fontSize:10,color:T.muted}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</td>}
+              <td style={{padding:"10px 14px",textAlign:"right"}}>
+                {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"3px 10px",borderRadius:4,border:`1px solid ${T.accent||"#2d8cf0"}`,background:"transparent",color:T.accent||"#2d8cf0",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
+                {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"3px 10px",borderRadius:4,border:`1px solid ${doc.deal_id?T.green||"#22c55e":T.border}`,background:"transparent",color:doc.deal_id?T.green||"#22c55e":T.muted,fontSize:10,fontWeight:600,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,fontFamily:"inherit"}}>{isSyncing?"...":"発注反映"}</button>}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>}
   </div>
 </div>
 );
