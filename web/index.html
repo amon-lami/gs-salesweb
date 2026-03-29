@@ -5142,39 +5142,42 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,leads
 
       {/* Step 1: Client Info */}
       {step===1&&(
-        <div style={{background:T.card,borderRadius:8,padding:IS_MOBILE?16:20,border:`1px solid ${T.border}`,display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr 1fr",gap:IS_MOBILE?12:16}}>
-          <div style={{gridColumn:IS_MOBILE?"auto":"span 3",display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`,marginBottom:4}}>
+        <div style={{background:T.card,borderRadius:8,padding:IS_MOBILE?16:20,border:`1px solid ${T.border}`,display:"flex",flexDirection:"column",gap:16,maxWidth:640}}>
+          {/* Section header */}
+          <div style={{display:"flex",alignItems:"center",gap:8,paddingBottom:8,borderBottom:`1px solid ${T.border}`}}>
             <div style={{width:24,height:24,borderRadius:6,background:(T.accent||"#2d8cf0")+"10",display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={T.accent||"#2d8cf0"} strokeWidth="1.3" strokeLinecap="round"/></svg></div>
             <span style={{fontSize:12,fontWeight:700,color:T.text}}>顧客情報</span>
             <span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>STEP 1</span>
           </div>
-          <div ref={acctDropRef} style={{position:"relative"}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>顧客選択{selectedLead&&<span style={{color:"#f59e0b",marginLeft:4}}>(リード)</span>}{isFreeText&&<span style={{color:T.accent,marginLeft:4}}>(新規)</span>}</div>
-            <input value={acctDropOpen?acctSearch:(selectedAccount?.name||selectedLead?.company_name||clientInfo.companyName||"")} onChange={e=>{setAcctSearch(e.target.value);setAcctDropOpen(true)}} onFocus={()=>{setAcctSearch("");setAcctDropOpen(true)}} placeholder="顧客名・リード名を検索 / 自由入力..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${acctDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
-            {(selectedAccount||selectedLead||isFreeText)&&!acctDropOpen&&<button onClick={()=>{setSelectedAccount(null);setSelectedLead(null);setIsFreeText(false);setSelectedContact(null);setSelectedDeal(null);setAcctSearch("");setClientInfo({companyName:"",address:"",country:"",phone:"",contactPerson:"",email:""})}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
-            {acctDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:280,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
-              {/* 取引先セクション */}
-              {filteredAccounts.length>0&&<div style={{padding:"4px 10px",fontSize:9,fontWeight:700,color:T.muted,background:T.bg,borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.3px"}}>取引先</div>}
-              {filteredAccounts.map(a=><div key={a.id} onClick={()=>{handleSelectAccount(a);setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`,display:"flex",alignItems:"center",gap:6}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"08"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{a.country&&<span style={{fontSize:13}}>{countryToFlag(a.country)}</span>}<span>{a.name}</span></div>)}
-              {/* リードセクション（見積書のみ） */}
-              {filteredLeads.length>0&&<div style={{padding:"4px 10px",fontSize:9,fontWeight:700,color:"#f59e0b",background:"#f59e0b08",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.3px"}}>リード</div>}
-              {filteredLeads.map(l=><div key={l.id} onClick={()=>{handleSelectLead(l);setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`,display:"flex",alignItems:"center",gap:6}} onMouseEnter={e=>e.currentTarget.style.background="#f59e0b08"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{l.country&&<span style={{fontSize:13}}>{countryToFlag(l.country)}</span>}<span>{l.company_name}</span><span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>{l.contact_name||""}</span></div>)}
-              {/* 自由入力オプション */}
-              {acctSearch.trim()&&filteredAccounts.length===0&&filteredLeads.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当する取引先・リードがありません</div>}
-              {mode==="quotation"&&acctSearch.trim()&&<div onClick={()=>{handleFreeTextCustomer(acctSearch.trim());setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:"transparent",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6,color:T.accent||"#2d8cf0"}} onMouseEnter={e=>e.currentTarget.style.background=(T.accent||"#2d8cf0")+"08"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span style={{fontWeight:700}}>+</span><span>「{acctSearch.trim()}」を新規顧客として入力</span>
+
+          {/* Row 1: 顧客選択 + 担当者 */}
+          <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:12}}>
+            <div ref={acctDropRef} style={{position:"relative"}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.sub,marginBottom:4}}>顧客選択{selectedLead&&<span style={{color:"#f59e0b",marginLeft:4}}>(リード)</span>}{isFreeText&&<span style={{color:T.accent,marginLeft:4}}>(新規)</span>}</div>
+              <input value={acctDropOpen?acctSearch:(selectedAccount?.name||selectedLead?.company_name||clientInfo.companyName||"")} onChange={e=>{setAcctSearch(e.target.value);setAcctDropOpen(true)}} onFocus={()=>{setAcctSearch("");setAcctDropOpen(true)}} placeholder="顧客名・リード名を検索 / 自由入力..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${acctDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+              {(selectedAccount||selectedLead||isFreeText)&&!acctDropOpen&&<button onClick={()=>{setSelectedAccount(null);setSelectedLead(null);setIsFreeText(false);setSelectedContact(null);setSelectedDeal(null);setAcctSearch("");setClientInfo({companyName:"",address:"",country:"",phone:"",contactPerson:"",email:""})}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
+              {acctDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:280,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
+                {filteredAccounts.length>0&&<div style={{padding:"4px 10px",fontSize:9,fontWeight:700,color:T.muted,background:T.bg,borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.3px"}}>取引先</div>}
+                {filteredAccounts.map(a=><div key={a.id} onClick={()=>{handleSelectAccount(a);setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`,display:"flex",alignItems:"center",gap:6}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"08"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{a.country&&<span style={{fontSize:13}}>{countryToFlag(a.country)}</span>}<span>{a.name}</span></div>)}
+                {filteredLeads.length>0&&<div style={{padding:"4px 10px",fontSize:9,fontWeight:700,color:"#f59e0b",background:"#f59e0b08",borderBottom:`1px solid ${T.border}`,textTransform:"uppercase",letterSpacing:"0.3px"}}>リード</div>}
+                {filteredLeads.map(l=><div key={l.id} onClick={()=>{handleSelectLead(l);setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`,display:"flex",alignItems:"center",gap:6}} onMouseEnter={e=>e.currentTarget.style.background="#f59e0b08"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{l.country&&<span style={{fontSize:13}}>{countryToFlag(l.country)}</span>}<span>{l.company_name}</span><span style={{fontSize:9,color:T.muted,marginLeft:"auto"}}>{l.contact_name||""}</span></div>)}
+                {acctSearch.trim()&&filteredAccounts.length===0&&filteredLeads.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当する取引先・リードがありません</div>}
+                {mode==="quotation"&&acctSearch.trim()&&<div onClick={()=>{handleFreeTextCustomer(acctSearch.trim());setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:"transparent",borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:6,color:T.accent||"#2d8cf0"}} onMouseEnter={e=>e.currentTarget.style.background=(T.accent||"#2d8cf0")+"08"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <span style={{fontWeight:700}}>+</span><span>「{acctSearch.trim()}」を新規顧客として入力</span>
+                </div>}
               </div>}
-            </div>}
-          </div>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>担当者</div>
-            <select value={selectedContact?.id||""} onChange={e=>{const c=filteredContacts.find(x=>x.id===e.target.value);if(c)handleSelectContact(c)}} disabled={!selectedAccount} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",opacity:!selectedAccount?0.5:1,boxSizing:"border-box"}}>
-              <option value="">-- 担当者選択 --</option>
-              {filteredContacts.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            {selectedContact&&<div style={{fontSize:9,color:T.muted,marginTop:4}}>✓ {selectedContact.name}</div>}
+            </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>担当者</div>
+              <select value={selectedContact?.id||""} onChange={e=>{const c=filteredContacts.find(x=>x.id===e.target.value);if(c)handleSelectContact(c)}} disabled={!selectedAccount} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",opacity:!selectedAccount?0.5:1,boxSizing:"border-box"}}>
+                <option value="">-- 担当者選択 --</option>
+                {filteredContacts.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              {selectedContact&&<div style={{fontSize:9,color:T.muted,marginTop:4}}>✓ {selectedContact.name}</div>}
+            </div>
           </div>
 
+          {/* Row 2: 商談リンク (full width) */}
           <div ref={dealDropRef} style={{position:"relative"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>商談リンク{mode==="invoice"?<span style={{color:T.red}}> *必須</span>:"（オプション）"}</div>
             <input value={dealDropOpen?dealSearch:(selectedDeal?.name||"")} onChange={e=>{setDealSearch(e.target.value);setDealDropOpen(true)}} onFocus={()=>{setDealSearch("");setDealDropOpen(true)}} placeholder="商談名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${dealDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
@@ -5185,36 +5188,41 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,leads
             </div>}
           </div>
 
-          <div style={{gridColumn:IS_MOBILE?"auto":"span 3",display:"grid",gridTemplateColumns:IS_MOBILE?"1fr 1fr":"1fr 1fr 1fr",gap:IS_MOBILE?8:12}}>
+          {/* Divider */}
+          <div style={{borderTop:`1px solid ${T.border}`,margin:"0 -20px",padding:"0 20px"}}/>
+
+          {/* Row 3: 書類宛先情報 */}
+          <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:12}}>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>会社名</div>
-              <input value={clientInfo.companyName} onChange={e=>setClientInfo(prev=>({...prev,companyName:e.target.value}))} placeholder="例: Acme Corp" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              <input value={clientInfo.companyName} onChange={e=>setClientInfo(prev=>({...prev,companyName:e.target.value}))} placeholder="例: Acme Corp" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>担当者名</div>
-              <input value={clientInfo.contactPerson} onChange={e=>setClientInfo(prev=>({...prev,contactPerson:e.target.value}))} placeholder="例: John Smith" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              <input value={clientInfo.contactPerson} onChange={e=>setClientInfo(prev=>({...prev,contactPerson:e.target.value}))} placeholder="例: John Smith" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
+          </div>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>住所</div>
+            <input value={clientInfo.address} onChange={e=>setClientInfo(prev=>({...prev,address:e.target.value}))} placeholder="Street address" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:12}}>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>国</div>
               <CountryInput value={clientInfo.country} onChange={v=>setClientInfo(prev=>({...prev,country:v}))} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
-            </div>
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>住所</div>
-              <input value={clientInfo.address} onChange={e=>setClientInfo(prev=>({...prev,address:e.target.value}))} placeholder="Street address" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
-            </div>
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>メール</div>
-              <input value={clientInfo.email} onChange={e=>setClientInfo(prev=>({...prev,email:e.target.value}))} placeholder="Email" type="email" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
             </div>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>電話</div>
               <PhoneInput value={clientInfo.phone} onChange={e=>setClientInfo(prev=>({...prev,phone:e.target.value}))} country={clientInfo.country||selectedAccount?.country||""} placeholder="電話番号" style={{width:"100%",padding:"8px 10px",paddingLeft:75,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
           </div>
-
-          <div style={{gridColumn:IS_MOBILE?"auto":"span 3",display:"flex",gap:8}}>
-            <button onClick={()=>{if(mode==="invoice"&&!selectedDeal){alert("請求書作成には商談リンクが必須です。");return}setStep(2)}} style={{flex:1,padding:10,background:T.accent||"#2d8cf0",color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>メール</div>
+            <input value={clientInfo.email} onChange={e=>setClientInfo(prev=>({...prev,email:e.target.value}))} placeholder="Email" type="email" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
           </div>
+
+          {/* Next button */}
+          <button onClick={()=>{if(mode==="invoice"&&!selectedDeal){alert("請求書作成には商談リンクが必須です。");return}setStep(2)}} style={{padding:10,background:T.accent||"#2d8cf0",color:"#fff",border:"none",borderRadius:8,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
         </div>
       )}
 
