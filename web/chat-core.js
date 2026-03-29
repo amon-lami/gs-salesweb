@@ -829,7 +829,7 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                     },
                         React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
                             React.createElement('span', { style: { fontSize: 7, transition: 'transform 0.15s', transform: collapsedCategories._groups ? 'rotate(-90deg)' : 'rotate(0deg)' } }, '▼'),
-                            '# グループ'
+                            'グループ'
                         ),
                         (() => {
                             const groupUnread = Object.entries(unreadMap).filter(([rid]) => filteredGeneralRooms.some(r => r.id === rid)).reduce((s, [, c]) => s + c, 0);
@@ -889,7 +889,7 @@ window.GSChat.ChatScreen = function ChatScreen({ supabase, user, profile, allUse
                             },
                                 React.createElement('span', { style: { display: 'flex', alignItems: 'center', gap: 4 } },
                                     React.createElement('span', { style: { fontSize: 7, transition: 'transform 0.15s', transform: collapsedCategories._deals ? 'rotate(-90deg)' : 'rotate(0deg)' } }, '▼'),
-                                    '💼 商談'
+                                    '商談'
                                 ),
                                 dealUnread > 0 ? React.createElement('span', { style: { background: t.red, color: '#fff', borderRadius: 8, padding: '0 4px', fontSize: 8, fontWeight: 700, minWidth: 14, textAlign: 'center', lineHeight: '14px' } }, dealUnread) : null
                             ),
