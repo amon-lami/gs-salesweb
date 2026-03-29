@@ -4799,7 +4799,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
             selling_price:item.selling_price||null,
             weight_g:item.weight_g||null,
             supplier:item.supplier||null,
-            status:"ordered",
+            status:"pending",
             created_by:user?.id||null,
           }));
           await client.from("order_items").insert(orderItems);
@@ -5510,7 +5510,7 @@ const[showStatusEditor,setShowStatusEditor]=useState(false);
 const[newStatusLabel,setNewStatusLabel]=useState("");
 const[newStatusColor,setNewStatusColor]=useState("#999999");
 
-const STATUS_COLORS={ordered:"#22c55e",paid:"#a855f7",sg_arrived:"#ec4899",gs_arrived:"#f59e0b",shipping:"#3b82f6",delivered:"#14b8a6"};
+const STATUS_COLORS={pending:"#9ca3af",ordered:"#22c55e",paid:"#a855f7",shipping:"#3b82f6",gs_arrived:"#f59e0b",ub_arrived:"#f59e0b",sg_arrived:"#ec4899",packed:"#06b6d4",shipped:"#f97316",koike:"#f43f5e",delivered:"#14b8a6"};
 
 const loadData=useCallback(async()=>{
   if(!client)return;
@@ -5581,73 +5581,82 @@ if(loading)return React.createElement("div",{style:{padding:40,textAlign:"center
 
 return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:IS_MOBILE?12:20}},
   // Header
-  React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
-    React.createElement("h2",{style:{fontSize:18,fontWeight:700,color:T.primary,margin:0}},"発注管理"),
-    React.createElement("button",{onClick:()=>setShowStatusEditor(!showStatusEditor),style:{padding:"6px 12px",background:showStatusEditor?T.primary:"#fff",color:showStatusEditor?"#fff":T.sub,border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}},showStatusEditor?"閉じる":"ステータス設定")
+  React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,background:T.card,padding:"12px 16px",borderRadius:10,border:`1px solid ${T.border}`}},
+    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10}},
+      React.createElement("div",{style:{width:32,height:32,borderRadius:8,background:(T.accent||"#2d8cf0")+"15",display:"flex",alignItems:"center",justifyContent:"center"}},
+        React.createElement("svg",{width:16,height:16,viewBox:"0 0 16 16",fill:"none"},
+          React.createElement("path",{d:"M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z",stroke:T.accent||"#2d8cf0",strokeWidth:"1.3"}),
+          React.createElement("path",{d:"M2 4l2-2h8l2 2",stroke:T.accent||"#2d8cf0",strokeWidth:"1.2"}),
+          React.createElement("path",{d:"M6 7h4",stroke:T.accent||"#2d8cf0",strokeWidth:"1.2",strokeLinecap:"round"})
+        )
+      ),
+      React.createElement("h2",{style:{fontSize:16,fontWeight:700,color:T.text,margin:0}},"発注管理")
+    ),
+    React.createElement("button",{onClick:()=>setShowStatusEditor(!showStatusEditor),style:{padding:"6px 14px",background:showStatusEditor?(T.accent||"#2d8cf0")+"12":"transparent",color:showStatusEditor?T.accent||"#2d8cf0":T.sub,border:`1px solid ${showStatusEditor?T.accent||"#2d8cf0":T.border}`,borderRadius:8,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},showStatusEditor?"✕ 閉じる":"⚙ ステータス設定")
   ),
 
   // Status Editor
-  showStatusEditor&&React.createElement("div",{style:{padding:12,background:T.card,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:12}},
-    React.createElement("div",{style:{fontSize:11,fontWeight:700,color:T.primary,marginBottom:8}},"ステータス管理"),
-    React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
-      statuses.map(s=>React.createElement("span",{key:s.id,style:{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:s.color+"20",color:s.color,fontSize:10,fontWeight:600,border:`1px solid ${s.color}40`}},
+  showStatusEditor&&React.createElement("div",{style:{padding:14,background:T.card,borderRadius:10,border:`1px solid ${T.border}`,marginBottom:12}},
+    React.createElement("div",{style:{fontSize:11,fontWeight:700,color:T.text,marginBottom:10}},"ステータス管理"),
+    React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}},
+      statuses.map(s=>React.createElement("span",{key:s.id,style:{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,background:s.color+"12",color:s.color,fontSize:10,fontWeight:600,border:`1px solid ${s.color}30`}},
         React.createElement("span",{style:{width:8,height:8,borderRadius:"50%",background:s.color}}),
         s.label
       ))
     ),
-    React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center"}},
-      React.createElement("input",{value:newStatusLabel,onChange:e=>setNewStatusLabel(e.target.value),placeholder:"新しいステータス名",style:{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,fontFamily:"inherit",flex:1}}),
-      React.createElement("input",{type:"color",value:newStatusColor,onChange:e=>setNewStatusColor(e.target.value),style:{width:30,height:26,border:"none",cursor:"pointer"}}),
-      React.createElement("button",{onClick:addCustomStatus,style:{padding:"5px 10px",background:T.primary,color:"#fff",border:"none",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}},"追加")
+    React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center",paddingTop:10,borderTop:`1px solid ${T.border}`}},
+      React.createElement("input",{value:newStatusLabel,onChange:e=>setNewStatusLabel(e.target.value),placeholder:"新しいステータス名",style:{padding:"6px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",flex:1}}),
+      React.createElement("input",{type:"color",value:newStatusColor,onChange:e=>setNewStatusColor(e.target.value),style:{width:30,height:28,border:`1px solid ${T.border}`,borderRadius:6,cursor:"pointer"}}),
+      React.createElement("button",{onClick:addCustomStatus,style:{padding:"6px 14px",background:T.accent||"#2d8cf0",color:"#fff",border:"none",borderRadius:6,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},"+ 追加")
     )
   ),
 
   // Status Summary Cards
   React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},
-    React.createElement("button",{onClick:()=>setFilterStatus("all"),style:{padding:"6px 12px",borderRadius:20,border:filterStatus==="all"?`2px solid ${T.primary}`:`1px solid ${T.border}`,background:filterStatus==="all"?T.primary:"#fff",color:filterStatus==="all"?"#fff":T.sub,fontSize:10,fontWeight:600,cursor:"pointer"}},"全て ("+items.length+")"),
-    statuses.map(s=>React.createElement("button",{key:s.id,onClick:()=>setFilterStatus(filterStatus===s.id?"all":s.id),style:{padding:"6px 12px",borderRadius:20,border:filterStatus===s.id?`2px solid ${s.color}`:`1px solid ${T.border}`,background:filterStatus===s.id?s.color+"15":"#fff",color:filterStatus===s.id?s.color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer"}},
-      React.createElement("span",{style:{display:"inline-block",width:6,height:6,borderRadius:"50%",background:s.color,marginRight:4}}),
+    React.createElement("button",{onClick:()=>setFilterStatus("all"),style:{padding:"5px 14px",borderRadius:8,border:filterStatus==="all"?`2px solid ${T.accent||"#2d8cf0"}`:`1px solid ${T.border}`,background:filterStatus==="all"?(T.accent||"#2d8cf0")+"12":T.card,color:filterStatus==="all"?T.accent||"#2d8cf0":T.sub,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},"全て ("+items.length+")"),
+    statuses.map(s=>React.createElement("button",{key:s.id,onClick:()=>setFilterStatus(filterStatus===s.id?"all":s.id),style:{padding:"5px 14px",borderRadius:8,border:filterStatus===s.id?`2px solid ${s.color}`:`1px solid ${T.border}`,background:filterStatus===s.id?s.color+"12":T.card,color:filterStatus===s.id?s.color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},
+      React.createElement("span",{style:{display:"inline-block",width:7,height:7,borderRadius:"50%",background:s.color,marginRight:5}}),
       s.label+" ("+(statusCounts[s.id]||0)+")"
     ))
   ),
 
   // Filters
   React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
-    React.createElement("input",{value:searchText,onChange:e=>setSearchText(e.target.value),placeholder:"商品名/JAN/備考で検索...",style:{flex:1,minWidth:150,padding:"6px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}}),
-    React.createElement("select",{value:filterSupplier,onChange:e=>setFilterSupplier(e.target.value),style:{padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}},
+    React.createElement("input",{value:searchText,onChange:e=>setSearchText(e.target.value),placeholder:"商品名/JAN/備考で検索...",style:{flex:1,minWidth:150,padding:"7px 12px",border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,fontFamily:"inherit",background:T.card}}),
+    React.createElement("select",{value:filterSupplier,onChange:e=>setFilterSupplier(e.target.value),style:{padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,fontFamily:"inherit",background:T.card}},
       React.createElement("option",{value:"all"},"仕入先: 全て"),
       suppliers.map(s=>React.createElement("option",{key:s,value:s},s))
     ),
-    React.createElement("select",{value:filterAccount,onChange:e=>setFilterAccount(e.target.value),style:{padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}},
+    React.createElement("select",{value:filterAccount,onChange:e=>setFilterAccount(e.target.value),style:{padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:8,fontSize:11,fontFamily:"inherit",background:T.card}},
       React.createElement("option",{value:"all"},"案件: 全て"),
       accountIds.map(id=>React.createElement("option",{key:id,value:id},accountMap[id]||id))
     )
   ),
 
   // Totals bar
-  React.createElement("div",{style:{padding:8,background:"#1a365d",borderRadius:6,color:"#fff",fontSize:11,fontWeight:600,display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}},
-    React.createElement("span",null,"表示: "+filtered.length+"件"),
-    React.createElement("span",null,"総仕入れ額: ¥"+totalCost.toLocaleString()),
-    React.createElement("span",null,"総数量: "+filtered.reduce((s,i)=>s+i.quantity,0)+"pcs")
+  React.createElement("div",{style:{padding:"10px 14px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,fontWeight:600,display:"flex",gap:20,flexWrap:"wrap",marginBottom:10,alignItems:"center"}},
+    React.createElement("span",{style:{color:T.sub}},"表示: ",React.createElement("span",{style:{color:T.text}},filtered.length+"件")),
+    React.createElement("span",{style:{color:T.sub}},"総仕入れ額: ",React.createElement("span",{style:{color:T.text,fontSize:13}},"¥"+totalCost.toLocaleString())),
+    React.createElement("span",{style:{color:T.sub}},"総数量: ",React.createElement("span",{style:{color:T.text}},filtered.reduce((s,i)=>s+i.quantity,0)+"pcs"))
   ),
 
   // Table
-  React.createElement("div",{style:{overflowX:"auto"}},
+  React.createElement("div",{style:{overflowX:"auto",border:`1px solid ${T.border}`,borderRadius:8}},
     React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:1100}},
       React.createElement("thead",null,
-        React.createElement("tr",{style:{background:"#1a365d",color:"#fff"}},
+        React.createElement("tr",{style:{background:(T.accent||"#2d8cf0")+"08",borderBottom:`2px solid ${(T.accent||"#2d8cf0")}30`}},
           ["入金日","進捗共有","商品名","JAN","発注数","入数","発注ケース","案件","仕入先","ステータス","備考","下代(税抜)","下代(税込)","総仕入れ額",""].map(h=>
-            React.createElement("th",{key:h,style:{padding:"5px 6px",textAlign:["下代(税抜)","下代(税込)","総仕入れ額"].includes(h)?"right":"left",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}},h)
+            React.createElement("th",{key:h,style:{padding:"8px 6px",textAlign:["下代(税抜)","下代(税込)","総仕入れ額"].includes(h)?"right":"left",fontWeight:700,fontSize:9,whiteSpace:"nowrap",color:T.text}},h)
           )
         )
       ),
       React.createElement("tbody",null,
         filtered.map((item,i)=>{
           const st=statusMap[item.status];
-          const bg=i%2===0?"#f8fafc":"#fff";
+          const bg=i%2===0?"transparent":T.bg;
           const costIncl=item.cost_price?Math.round(item.cost_price*1.1):0;
           const total=costIncl*item.quantity;
-          return React.createElement("tr",{key:item.id,style:{background:bg,borderBottom:"1px solid #e2e8f0"}},
+          return React.createElement("tr",{key:item.id,style:{background:bg,borderBottom:`1px solid ${T.border}`}},
             // 入金日
             React.createElement("td",{style:{padding:"3px 4px"}},
               React.createElement("input",{type:"date",value:item.payment_date||"",onChange:e=>updateField(item.id,"payment_date",e.target.value||null),style:{border:`1px solid ${T.border}`,borderRadius:3,fontSize:10,padding:"2px 4px",width:100,fontFamily:"inherit"}})
@@ -6325,7 +6334,7 @@ const syncToOrders=async(doc)=>{
       selling_price:item.selling_price||null,
       weight_g:item.weight_g||null,
       supplier:item.supplier||null,
-      status:"ordered",
+      status:"pending",
       created_by:user?.id||null,
     }));
     const{error}=await client.from("order_items").insert(orderItems);
