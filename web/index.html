@@ -4125,14 +4125,23 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
   const searchTimer=useRef(null);
 
-  // Auto-generate doc number (with company name)
+  // Auto-generate doc number: PREFIX-取引先名-YYYY-MM-番号
   useEffect(()=>{
     const today=new Date();
-    const yyyymmdd=today.getFullYear().toString()+(today.getMonth()+1).toString().padStart(2,"0")+today.getDate().toString().padStart(2,"0");
+    const yyyy=today.getFullYear().toString();
+    const mm=(today.getMonth()+1).toString().padStart(2,"0");
     const prefix=mode==="quotation"?"Q":"INV";
     const company=selectedAccount?selectedAccount.name.replace(/[\s,./()（）株式会社有限会社合同会社Inc\.Ltd\.Corp\.LLC]/gi,"").slice(0,20):"";
-    setDocNumber(company?`${yyyymmdd}-${prefix}-${company}`:`${yyyymmdd}-${prefix}1`);
-  },[mode,selectedAccount]);
+    // Count existing docs this month to generate sequential number
+    if(client&&selectedAccount){
+      client.from("generated_documents").select("id",{count:"exact",head:true}).eq("doc_type",mode).eq("account_id",selectedAccount.id).gte("created_at",`${yyyy}-${mm}-01`).then(({count})=>{
+        const num=((count||0)+1).toString().padStart(3,"0");
+        setDocNumber(`${prefix}-${company}-${yyyy}-${mm}-${num}`);
+      });
+    }else{
+      setDocNumber(company?`${prefix}-${company}-${yyyy}-${mm}-001`:`${prefix}-${yyyy}-${mm}-001`);
+    }
+  },[mode,selectedAccount,client]);
 
   // Filter contacts by selected account
   const filteredContacts=useMemo(()=>{
@@ -5596,6 +5605,7 @@ const statusMap=useMemo(()=>{
 const suppliers=useMemo(()=>[...new Set(items.map(i=>i.supplier).filter(Boolean))].sort(),[items]);
 const accountIds=useMemo(()=>[...new Set(items.map(i=>i.account_id).filter(Boolean))],[items]);
 const accountMap=useMemo(()=>{const m={};(accounts||[]).forEach(a=>{m[a.id]=a.name});return m},[accounts]);
+const dealMap=useMemo(()=>{const m={};(deals||[]).forEach(d=>{m[d.id]=d});return m},[deals]);
 
 const filtered=useMemo(()=>{
   let f=items;
@@ -5720,7 +5730,9 @@ return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:I
             React.createElement("td",{style:{padding:"4px 4px",textAlign:"center",fontSize:10}},item.case_quantity&&item.case_quantity>0?(item.quantity/item.case_quantity).toFixed(1)+"ケース":"-"),
             // 案件
             React.createElement("td",{style:{padding:"4px 4px",fontSize:10}},
-              React.createElement("span",{style:{padding:"1px 6px",borderRadius:4,background:T.accent+"15",color:T.accent,fontWeight:600,fontSize:9}},accountMap[item.account_id]||"-")
+              React.createElement("span",{style:{padding:"1px 6px",borderRadius:4,background:T.accent+"15",color:T.accent,fontWeight:600,fontSize:9}},
+                item.deal_id&&dealMap[item.deal_id]?dealMap[item.deal_id].name:accountMap[item.account_id]||"-"
+              )
             ),
             // 仕入先
             React.createElement("td",{style:{padding:"4px 4px",fontSize:10,fontWeight:600,color:T.sub}},item.supplier||"-"),
