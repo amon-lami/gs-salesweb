@@ -5310,15 +5310,9 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
           <div style={{padding:12,background:T.borderLight,borderRadius:8}}>
             <div style={{fontSize:11,fontWeight:700,color:T.primary,marginBottom:8}}>為替レート</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>USD/JPY</div>
-                <input type="number" value={jpy_rate} onChange={e=>setJpyRate(parseFloat(e.target.value)||150)} step="0.1" style={{width:"100%",maxWidth:120,padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
-              </div>
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>USD/CAD</div>
-                <input type="number" value={cad_rate} onChange={e=>setCadRate(parseFloat(e.target.value)||1.37)} step="0.01" style={{width:"100%",maxWidth:120,padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
-              </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>USD/JPY</div>
+              <input type="number" value={jpy_rate} onChange={e=>setJpyRate(parseFloat(e.target.value)||150)} step="0.1" style={{width:"100%",maxWidth:120,padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
             </div>
           </div>
 
@@ -5393,8 +5387,8 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:1100}}>
               <thead>
                 <tr style={{background:T.bg,borderBottom:`2px solid ${T.border}`}}>
-                  {["JAN","商品名","ケース入数","仕入先","下代(税抜)","重さ(g)","価格変動数量","下代(税込)","利益率","数量","提示価格(JPY)","提示価格(USD)","提示価格(CAD)","売上合計","利益合計",""].map((h,hi)=>(
-                    <th key={hi} style={{padding:"8px 6px",textAlign:hi>=13?"right":hi<=1?"left":"center",fontWeight:700,fontSize:9,whiteSpace:"nowrap",color:T.sub,letterSpacing:".02em"}}>{h}</th>
+                  {["JAN","商品名","ケース入数","仕入先","下代(税抜)","重さ(g)","価格変動数量","下代(税込)","利益率","数量","提示価格(JPY)","提示価格(USD)","売上合計","利益合計",""].map((h,hi)=>(
+                    <th key={hi} style={{padding:"8px 6px",textAlign:hi>=12?"right":hi<=1?"left":"center",fontWeight:700,fontSize:9,whiteSpace:"nowrap",color:T.sub,letterSpacing:".02em"}}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -5406,7 +5400,6 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                   const margin=amt>0?(profit/amt)*100:0;
                   const costTaxIncl=Math.round((item.cost_price||0)*1.1);
                   const priceJpy=Math.round(item.selling_price*jpy_rate);
-                  const priceCad=(item.selling_price*cad_rate).toFixed(2);
                   const salesTotal=Math.round(item.selling_price*item.quantity*jpy_rate);
                   const profitJpy=Math.round(profit*jpy_rate);
                   const csWarn=item.case_quantity>0&&item.quantity%item.case_quantity!==0;
@@ -5425,7 +5418,6 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                       <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",e.target.value)} min="1" style={{width:48,padding:"4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:T.bg}}/></td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.text}}>¥{priceJpy.toLocaleString()}</td>
                       <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",e.target.value)} step="0.01" style={{width:64,padding:"4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:T.bg}}/></td>
-                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.text}}>${priceCad}</td>
                       <td style={{padding:"6px 4px",textAlign:"right",fontSize:10,fontWeight:600,color:T.text}}>¥{salesTotal.toLocaleString()}</td>
                       <td style={{padding:"6px 4px",textAlign:"right",fontSize:10,fontWeight:600,color:profitJpy>=0?"#16a34a":"#dc2626"}}>¥{profitJpy.toLocaleString()}</td>
                       <td style={{padding:"3px 2px",textAlign:"center"}}><button onClick={()=>removeItem(i)} style={{background:"none",border:"none",fontSize:11,cursor:"pointer",color:T.muted,padding:2}} title="削除">✕</button></td>
