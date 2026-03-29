@@ -3924,7 +3924,8 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   },[accounts,acctSearch]);
 
   const filteredDeals=useMemo(()=>{
-    const base=selectedAccount?(deals||[]).filter(d=>d.account_id===selectedAccount.id):(deals||[]);
+    const closedStages=["closed","lost"];
+    const base=(selectedAccount?(deals||[]).filter(d=>d.account_id===selectedAccount.id):(deals||[])).filter(d=>!closedStages.includes(d.stage));
     if(!dealSearch)return base.slice(0,20);
     const q=dealSearch.toLowerCase();
     return base.filter(d=>d.opportunity_name?.toLowerCase().includes(q)).slice(0,20);
@@ -4710,25 +4711,14 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
   // ── Excel Export (matching exact template layout) ──
   const generateExcel=async()=>{
-    // Load SheetJS if not loaded
-    if(!window.XLSX){
+    // Load ExcelJS (supports styles, unlike free SheetJS)
+    if(!window.ExcelJS){
       const s=document.createElement("script");
-      s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+      s.src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
       document.head.appendChild(s);
-      await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(new Error("SheetJS読み込み失敗"))});
+      await new Promise((res,rej)=>{s.onload=res;s.onerror=()=>rej(new Error("ExcelJS読み込み失敗"))});
     }
-    const XLSX=window.XLSX;
-    const wb=XLSX.utils.book_new();
-    const ws={};
 
-    // Helper: set cell with style info (stored as comments for xlsx-style)
-    const setCell=(ref,val,opts={})=>{
-      const cell={v:val,t:typeof val==="number"?"n":"s"};
-      if(opts.formula){cell.f=opts.formula;delete cell.v;cell.t="n"}
-      ws[ref]=cell;
-    };
-
-    // Date formatting helper
     const fmtDate=(dateStr)=>{
       const d=new Date(dateStr);
       const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -4742,88 +4732,130 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     const dueLine=isInvoice?`Payment Due By: ${fmtDate(dueDate)}`:`Quote Valid Until: ${fmtDate(dueDate)}`;
     const docLabel=isInvoice?"Invoice Number:":"Quotation Number:";
     const toLabel=isInvoice?"B I L L  T O":"S H I P  T O";
-
-    // FROM info (Global Stride)
     const fromCompany="Global Stride Inc.";
-    const fromAddr1="6A 4-5-11 Ueshio Tennoji-ku,";
-    const fromAddr2="Osaka-shi, Osaka-fu 543-0002";
-    const fromCountry="Japan";
-    const fromPhone="+81 50-1808-6320";
-
-    // TO info (from clientInfo)
     const toCompany=clientInfo.companyName||"";
     const toAddr=clientInfo.address||"";
     const toCityCountry=[clientInfo.city,clientInfo.country].filter(Boolean).join(" ");
     const toPhone=clientInfo.phone||"";
 
-    // Row 1: Title + Date
-    setCell("A1",title);
-    setCell("F1",`Date: ${fmtDate(docDate)}`);
+    const wb=new window.ExcelJS.Workbook();
+    const ws=wb.addWorksheet("Invoice");
 
-    // Row 2-3: Due date + Doc number
-    setCell("F2",dueLine);
-    setCell("F3",`${docLabel} ${docNumber}`);
+    // Column widths
+    ws.columns=[{width:5},{width:22},{width:18},{width:14},{width:16},{width:12},{width:14},{width:12}];
 
-    // Row 6: FROM / SHIP TO labels
-    setCell("A6","F R O M");
-    setCell("E6",toLabel);
+    // Styles
+    const fontB={name:"Arial",size:10,bold:true,color:{argb:"FF000000"}};
+    const fontN={name:"Arial",size:10,color:{argb:"FF000000"}};
+    const fontGray={name:"Arial",size:10,bold:true,color:{argb:"FF888888"}};
+    const fontWhite={name:"Arial",size:10,bold:true,color:{argb:"FFFFFFFF"}};
+    const thinBorder={top:{style:"thin"},bottom:{style:"thin"},left:{style:"thin"},right:{style:"thin"}};
+    const blackFill={type:"pattern",pattern:"solid",fgColor:{argb:"FF000000"}};
+    const grayFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF2F2F2"}};
+    const whiteFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFFFFFF"}};
+    const bankFill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF8F8F8"}};
+
+    // Helper: merge and style
+    const mergeSet=(r,c1,c2,val,font,align,fill,border)=>{
+      if(c1!==c2)ws.mergeCells(r,c1,r,c2);
+      const cell=ws.getCell(r,c1);
+      cell.value=val;cell.font=font||fontN;
+      cell.alignment={horizontal:align||"left",vertical:"center"};
+      if(fill)cell.fill=fill;
+      if(border)cell.border=border;
+    };
+
+    // Row heights
+    ws.getRow(1).height=36;
+    [2,3].forEach(r=>ws.getRow(r).height=18);
+    ws.getRow(4).height=6;ws.getRow(5).height=12;
+    ws.getRow(6).height=19.5;
+    [7,8,9,10,11].forEach(r=>ws.getRow(r).height=18);
+    ws.getRow(12).height=15.75;
+
+    // Row 1: Title
+    mergeSet(1,1,3,title,{name:"Arial",size:24,bold:true,color:{argb:"FF000000"}},"left");
+    mergeSet(1,6,8,`Date: ${fmtDate(docDate)}`,fontB,"right");
+
+    // Row 2-3
+    mergeSet(2,6,8,dueLine,fontB,"right");
+    mergeSet(3,6,8,`${docLabel} ${docNumber}`,fontB,"right");
+
+    // Row 6: FROM / TO
+    mergeSet(6,1,4,"F R O M",fontGray);
+    mergeSet(6,5,8,toLabel,fontGray);
 
     // Row 7-11: Company info
-    setCell("A7",`Company Name: ${fromCompany}`);
-    setCell("E7",`Company Name: ${toCompany}`);
-    setCell("A8",`Street Address: ${fromAddr1}`);
-    setCell("E8",`Street Address: ${toAddr}`);
-    setCell("A9",`                    ${fromAddr2}`);
-    setCell("E9",`                    ${toCityCountry}`);
-    setCell("A10",`                    ${fromCountry}`);
-    if(toPhone)setCell("E10",`Phone: ${toPhone}`);
-    setCell("A11",`Phone: ${fromPhone}`);
+    mergeSet(7,1,4,`Company Name: ${fromCompany}`,fontB);
+    mergeSet(7,5,8,`Company Name: ${toCompany}`,fontB);
+    mergeSet(8,1,4,`Street Address: 6A 4-5-11 Ueshio Tennoji-ku,`,fontB);
+    mergeSet(8,5,8,`Street Address: ${toAddr}`,fontB);
+    mergeSet(9,1,4,"                    Osaka-shi, Osaka-fu 543-0002",fontN);
+    mergeSet(9,5,8,`                    ${toCityCountry}`,fontN);
+    mergeSet(10,1,4,"                    Japan",fontN);
+    mergeSet(10,5,8,toPhone?`Phone: ${toPhone}`:"",fontB);
+    mergeSet(11,1,4,"Phone: +81 50-1808-6320",fontB);
 
-    // Row 13: Table header
-    const headerRow=13;
-    setCell(`A${headerRow}`,"Description");
-    setCell(`D${headerRow}`,"JAN");
-    setCell(`E${headerRow}`,"Quantity");
-    setCell(`F${headerRow}`,"Unit Price");
-    setCell(`H${headerRow}`,"Amount");
-
-    // Rows 14+: Items
-    const dataStartRow=14;
-    docItems.forEach((item,i)=>{
-      const r=dataStartRow+i;
-      setCell(`A${r}`,item.name_en||item.name_ja||"");
-      setCell(`D${r}`,item.jan||"");
-      setCell(`E${r}`,item.quantity);
-      setCell(`F${r}`,item.selling_price);
-      setCell(`H${r}`,null,{formula:`E${r}*F${r}`});
+    // Row 13: Table header (black bg, white text)
+    const hRow=13;
+    ws.getRow(hRow).height=27.75;
+    [[1,3,"Description"],[4,4,"JAN"],[5,5,"Quantity"],[6,7,"Unit Price"],[8,8,"Amount"]].forEach(([c1,c2,val])=>{
+      mergeSet(hRow,c1,c2,val,fontWhite,"center",blackFill,thinBorder);
     });
 
-    const lastItemRow=dataStartRow+docItems.length-1;
-    const gapRow=lastItemRow+2;
+    // Rows 14+: Items (alternating gray/white)
+    const dataStart=14;
+    docItems.forEach((item,i)=>{
+      const r=dataStart+i;
+      const bg=i%2===0?grayFill:whiteFill;
+      ws.getRow(r).height=31.5;
+      mergeSet(r,1,3,item.name_en||item.name_ja||"",fontN,"left",bg,thinBorder);
+      const janCell=ws.getCell(r,4);janCell.value=item.jan||"";janCell.font=fontN;janCell.alignment={horizontal:"center",vertical:"center"};janCell.fill=bg;janCell.border=thinBorder;
+      const qtyCell=ws.getCell(r,5);qtyCell.value=item.quantity;qtyCell.font=fontN;qtyCell.alignment={horizontal:"center",vertical:"center"};qtyCell.fill=bg;qtyCell.border=thinBorder;
+      mergeSet(r,6,7,item.selling_price,fontN,"center",bg,thinBorder);
+      const amtCell=ws.getCell(r,8);amtCell.value={formula:`E${r}*F${r}`};amtCell.font=fontB;amtCell.alignment={horizontal:"right",vertical:"center"};amtCell.fill=bg;amtCell.border=thinBorder;
+    });
+
+    const lastItem=dataStart+docItems.length-1;
+    const gapRow=lastItem+2;
+
+    // Spacer row
+    ws.getRow(lastItem+1).height=9.75;
 
     // Sub Total
-    setCell(`D${gapRow}`,"Sub Total");
-    setCell(`G${gapRow}`,null,{formula:`SUM(H${dataStartRow}:H${lastItemRow})`});
+    ws.getRow(gapRow).height=24;
+    ws.mergeCells(gapRow,4,gapRow,6);ws.getCell(gapRow,4).value="Sub Total";ws.getCell(gapRow,4).font=fontN;ws.getCell(gapRow,4).alignment={horizontal:"right",vertical:"center"};
+    ws.mergeCells(gapRow,7,gapRow,8);ws.getCell(gapRow,7).value={formula:`SUM(H${dataStart}:H${lastItem})`};ws.getCell(gapRow,7).font=fontB;ws.getCell(gapRow,7).alignment={horizontal:"right",vertical:"center"};
 
-    // Shipping Cost
-    setCell(`D${gapRow+1}`,"Shipping Cost");
-    setCell(`G${gapRow+1}`,shippingCost);
+    // Shipping
+    ws.getRow(gapRow+1).height=24;
+    ws.mergeCells(gapRow+1,4,gapRow+1,6);ws.getCell(gapRow+1,4).value="Shipping Cost";ws.getCell(gapRow+1,4).font=fontN;ws.getCell(gapRow+1,4).alignment={horizontal:"right",vertical:"center"};
+    ws.mergeCells(gapRow+1,7,gapRow+1,8);ws.getCell(gapRow+1,7).value=shippingCost;ws.getCell(gapRow+1,7).font=fontB;ws.getCell(gapRow+1,7).alignment={horizontal:"right",vertical:"center"};
 
-    // Total Amount
-    setCell(`D${gapRow+2}`,"Total Amount");
-    setCell(`G${gapRow+2}`,null,{formula:`G${gapRow}+G${gapRow+1}`});
+    // Total Amount (black bg)
+    ws.getRow(gapRow+2).height=30;
+    ws.mergeCells(gapRow+2,4,gapRow+2,6);const totalLabel=ws.getCell(gapRow+2,4);totalLabel.value="Total Amount";totalLabel.font=fontWhite;totalLabel.alignment={horizontal:"right",vertical:"center"};totalLabel.fill=blackFill;totalLabel.border=thinBorder;
+    ws.mergeCells(gapRow+2,7,gapRow+2,8);const totalVal=ws.getCell(gapRow+2,7);totalVal.value={formula:`G${gapRow}+G${gapRow+1}`};totalVal.font={name:"Arial",size:12,bold:true,color:{argb:"FF000000"}};totalVal.alignment={horizontal:"right",vertical:"center"};totalVal.border=thinBorder;
 
-    let currentRow=gapRow+4;
+    let curRow=gapRow+4;
 
     // Bank details (Invoice only)
     if(isInvoice){
-      const bankInfo=bankDetails||{};
-      setCell(`A${currentRow}`,`Bank Name: ${bankInfo.bank_name||"Wise"}`);
-      setCell(`A${currentRow+1}`,`Account Holder's Name: ${bankInfo.account_holder||fromCompany}`);
-      setCell(`A${currentRow+2}`,`Bank Account Number: ${bankInfo.account_number||""}`);
-      setCell(`A${currentRow+3}`,`Routing Number: ${bankInfo.routing_number||bankInfo.swift_code||""}`);
-      setCell(`A${currentRow+4}`,`Bank Address: ${bankInfo.bank_address||""}`);
-      currentRow+=6;
+      const bi=bankDetails||{};
+      const bankRows=[
+        `Bank Name: ${bi.bank_name||"Wise"}`,
+        `Account Holder's Name: ${bi.account_holder||fromCompany}`,
+        `Bank Account Number: ${bi.account_number||""}`,
+        `Routing Number: ${bi.routing_number||bi.swift_code||""}`,
+        `Bank Address: ${bi.bank_address||""}`
+      ];
+      bankRows.forEach((txt,i)=>{
+        const r=curRow+i;
+        ws.getRow(r).height=19.5;
+        ws.mergeCells(r,1,r,8);
+        const c=ws.getCell(r,1);c.value=txt;c.font=i===0?fontB:fontN;c.alignment={horizontal:"left",vertical:"center"};c.fill=bankFill;c.border=thinBorder;
+      });
+      curRow+=6;
     }
 
     // Delivery Terms
@@ -4835,62 +4867,22 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       EXW:"The buyer is responsible for all transportation costs and risks from the seller's premises.",
       DDP:"The seller (Global Stride Inc.) is responsible for delivering the goods to the buyer's premises, including all import duties, taxes, and customs clearance."
     };
-    setCell(`A${currentRow}`,`Delivery Terms: ${incoLabels[incoterm]||incoterm}`);
-    setCell(`A${currentRow+1}`,incoDesc[incoterm]||"");
-    currentRow+=3;
+    ws.getRow(curRow).height=21.75;
+    ws.mergeCells(curRow,1,curRow,8);ws.getCell(curRow,1).value=`Delivery Terms: ${incoLabels[incoterm]||incoterm}`;ws.getCell(curRow,1).font=fontB;
+    curRow++;
+    ws.getRow(curRow).height=36;
+    ws.mergeCells(curRow,1,curRow,8);const descCell=ws.getCell(curRow,1);descCell.value=incoDesc[incoterm]||"";descCell.font={name:"Arial",size:9,color:{argb:"FF000000"}};descCell.alignment={horizontal:"left",vertical:"top",wrapText:true};
+    curRow+=2;
 
     // Remarks
-    setCell(`A${currentRow}`,"Remarks");
-    setCell(`A${currentRow+1}`,notes||"");
+    ws.getRow(curRow).height=18;
+    ws.mergeCells(curRow,1,curRow,8);ws.getCell(curRow,1).value="Remarks";ws.getCell(curRow,1).font=fontB;
+    curRow++;
+    ws.getRow(curRow).height=18;
+    ws.mergeCells(curRow,1,curRow,8);ws.getCell(curRow,1).value=notes||"";ws.getCell(curRow,1).font=fontB;
 
-    // Set sheet range
-    const maxRow=currentRow+1;
-    ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxRow-1,c:7}});
-
-    // Column widths (matching template)
-    ws["!cols"]=[{wch:5},{wch:22},{wch:18},{wch:14},{wch:16},{wch:12},{wch:14},{wch:12}];
-
-    // Merged cells (dynamic based on item count)
-    ws["!merges"]=[
-      // Title
-      {s:{r:0,c:0},e:{r:0,c:2}},  // A1:C1
-      {s:{r:0,c:5},e:{r:0,c:7}},  // F1:H1
-      {s:{r:1,c:5},e:{r:1,c:7}},  // F2:H2
-      {s:{r:2,c:5},e:{r:2,c:7}},  // F3:H3
-      // FROM / TO
-      {s:{r:5,c:0},e:{r:5,c:3}},  // A6:D6
-      {s:{r:5,c:4},e:{r:5,c:7}},  // E6:H6
-      {s:{r:6,c:0},e:{r:6,c:3}},  // A7:D7
-      {s:{r:6,c:4},e:{r:6,c:7}},  // E7:H7
-      {s:{r:7,c:0},e:{r:7,c:3}},  // A8:D8
-      {s:{r:7,c:4},e:{r:7,c:7}},  // E8:H8
-      {s:{r:8,c:0},e:{r:8,c:3}},  // A9:D9
-      {s:{r:8,c:4},e:{r:8,c:7}},  // E9:H9
-      {s:{r:9,c:0},e:{r:9,c:3}},  // A10:D10
-      {s:{r:9,c:4},e:{r:9,c:7}},  // E10:H10
-      {s:{r:10,c:0},e:{r:10,c:3}}, // A11:D11
-      // Table header: Description A:C merged, Unit Price F:G merged
-      {s:{r:12,c:0},e:{r:12,c:2}}, // A13:C13
-      {s:{r:12,c:5},e:{r:12,c:6}}, // F13:G13
-    ];
-    // Item rows: merge A:C and F:G for each
-    docItems.forEach((_,i)=>{
-      const r=13+i; // 0-indexed row
-      ws["!merges"].push({s:{r,c:0},e:{r,c:2}}); // A:C
-      ws["!merges"].push({s:{r,c:5},e:{r,c:6}}); // F:G
-    });
-    // Totals: D:F merged, G:H merged
-    const gR=gapRow-1; // 0-indexed
-    ws["!merges"].push({s:{r:gR,c:3},e:{r:gR,c:5}});   // Sub Total D:F
-    ws["!merges"].push({s:{r:gR,c:6},e:{r:gR,c:7}});   // Sub Total G:H
-    ws["!merges"].push({s:{r:gR+1,c:3},e:{r:gR+1,c:5}});// Shipping D:F
-    ws["!merges"].push({s:{r:gR+1,c:6},e:{r:gR+1,c:7}});// Shipping G:H
-    ws["!merges"].push({s:{r:gR+2,c:3},e:{r:gR+2,c:5}});// Total D:F
-    ws["!merges"].push({s:{r:gR+2,c:6},e:{r:gR+2,c:7}});// Total G:H
-
-    XLSX.utils.book_append_sheet(wb,ws,"Invoice");
-    const xlsxData=XLSX.write(wb,{bookType:"xlsx",type:"array"});
-    const blob=new Blob([xlsxData],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
     a.href=url;
@@ -5268,12 +5260,56 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
             </div>
           </div>
 
-          <div style={{padding:12,background:T.borderLight,borderRadius:8}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,fontSize:12,fontWeight:600}}>
+          {/* Product Detail Table */}
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+              <thead>
+                <tr style={{background:"#111",color:"#fff"}}>
+                  <th style={{padding:"6px 8px",textAlign:"left",fontWeight:600,fontSize:10}}>商品名</th>
+                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>JAN</th>
+                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>数量</th>
+                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>単価(USD)</th>
+                  <th style={{padding:"6px 8px",textAlign:"right",fontWeight:600,fontSize:10}}>小計</th>
+                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>原価(¥)</th>
+                  <th style={{padding:"6px 8px",textAlign:"right",fontWeight:600,fontSize:10}}>利益</th>
+                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>率</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:10,width:28}}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {docItems.map((item,i)=>{
+                  const amt=item.selling_price*item.quantity;
+                  const costUsd=(item.cost_price||0)/jpy_rate;
+                  const profit=(item.selling_price-costUsd)*item.quantity;
+                  const margin=amt>0?(profit/amt)*100:0;
+                  const bg=i%2===0?"#f9f9f9":"#fff";
+                  return(
+                    <tr key={i} style={{background:bg,borderBottom:"1px solid #eee"}}>
+                      <td style={{padding:"6px 8px",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name_en||item.name_ja}</td>
+                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.muted}}>{item.jan}</td>
+                      <td style={{padding:"4px 2px",textAlign:"center"}}><input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",e.target.value)} min="1" style={{width:48,padding:"3px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/></td>
+                      <td style={{padding:"4px 2px",textAlign:"center"}}><input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",e.target.value)} step="0.01" style={{width:64,padding:"3px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/></td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600}}>${amt.toFixed(2)}</td>
+                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.muted}}>¥{(item.cost_price||0).toLocaleString()}</td>
+                      <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:profit>=0?T.green:T.red}}>${profit.toFixed(2)}</td>
+                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,fontWeight:600,color:margin>=20?T.green:margin>=10?"#d97706":T.red}}>{margin.toFixed(1)}%</td>
+                      <td style={{padding:"4px 2px",textAlign:"center"}}><button onClick={()=>removeItem(i)} style={{background:"none",border:"none",fontSize:12,cursor:"pointer",color:T.red,padding:0}} title="削除">✕</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals Summary */}
+          <div style={{padding:12,background:"#111",borderRadius:8,color:"#fff"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:12,fontWeight:600}}>
               <div>小計: ${subtotal.toFixed(2)}</div>
               <div>配送料: ${shippingCost.toFixed(2)}</div>
-              <div style={{fontSize:13,color:T.primary}}>合計 ({currency}): {currency==="USD"?"$":""}{grand.toFixed(2)}</div>
-              <div style={{color:T.green}}>利益: ${totalProfit.toFixed(2)} ({overallMarginPct.toFixed(1)}%)</div>
+              <div style={{fontSize:14}}>合計 ({currency}): {currency==="USD"?"$":""}{grand.toFixed(2)}</div>
+              <div style={{color:"#4ade80"}}>利益: ${totalProfit.toFixed(2)} ({overallMarginPct.toFixed(1)}%)</div>
+              <div style={{fontSize:10,color:"#999"}}>総重量: {totalWeight.toFixed(2)} kg</div>
+              <div style={{fontSize:10,color:"#999"}}>商品数: {docItems.length}種 / {docItems.reduce((s,i)=>s+i.quantity,0)}個</div>
             </div>
           </div>
 
