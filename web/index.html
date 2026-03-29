@@ -4829,30 +4829,6 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       if(error)throw error;
       const savedDocId=docResult?.[0]?.id||null;
 
-      // Auto-create order items if linked to a deal
-      if(selectedDeal&&docItems.length>0){
-        try{
-          const orderItems=docItems.map(item=>({
-            deal_id:selectedDeal.id,
-            document_id:savedDocId,
-            account_id:selectedAccount?.id||selectedDeal.account_id||null,
-            product_id:item.product_id||null,
-            jan:item.jan||null,
-            name_en:item.name_en||"",
-            name_ja:item.name_ja||"",
-            quantity:item.quantity||0,
-            case_quantity:item.case_quantity||null,
-            cost_price:item.cost_price||null,
-            selling_price:item.selling_price||null,
-            weight_g:item.weight_g||null,
-            supplier:item.supplier||null,
-            status:"pending",
-            created_by:user?.id||null,
-          }));
-          await client.from("order_items").insert(orderItems);
-        }catch(orderErr){console.error("Order items creation failed:",orderErr)}
-      }
-
       setSaveErr("");
       // Auto-download Excel + attach to deal if linked
       try{
