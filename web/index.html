@@ -4105,8 +4105,8 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     if(initialDoc.shipping!=null)setShippingCost(initialDoc.shipping);
     if(initialDoc.currency)setCurrency(initialDoc.currency);
     if(initialDoc.notes)setNotes(initialDoc.notes);
-    // Jump to currency step for invoice (step 4), summary for quotation (step 4)
-    _setStep(4);
+    // Start from step 1 so user can confirm/set deal link
+    _setStep(1);
   },[]);
 
   const searchTimer=useRef(null);
@@ -5070,7 +5070,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           </div>
 
           <div ref={dealDropRef} style={{gridColumn:IS_MOBILE?"auto":"span 2",position:"relative"}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>案件リンク（オプション）</div>
+            <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>商談リンク{mode==="invoice"?<span style={{color:T.red}}> *必須</span>:"（オプション）"}</div>
             <input value={dealDropOpen?dealSearch:(selectedDeal?.name||"")} onChange={e=>{setDealSearch(e.target.value);setDealDropOpen(true)}} onFocus={()=>{setDealSearch("");setDealDropOpen(true)}} placeholder="案件名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${dealDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
             {selectedDeal&&!dealDropOpen&&<button onClick={()=>{setSelectedDeal(null);setDealSearch("")}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
             {dealDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
@@ -5107,7 +5107,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           </div>
 
           <div style={{gridColumn:IS_MOBILE?"auto":"span 2",display:"flex",gap:8}}>
-            <button onClick={()=>setStep(2)} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
+            <button onClick={()=>{if(mode==="invoice"&&!selectedDeal){alert("請求書作成には商談リンクが必須です。");return}setStep(2)}} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
           </div>
         </div>
       )}
