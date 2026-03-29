@@ -3908,6 +3908,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[searching,setSearching]=useState(false);
   const[addQty,setAddQty]=useState(1);
   const[jpy_rate,setJpyRate]=useState(150);
+  const[cad_rate,setCadRate]=useState(1.37);
 
   // State: Account/Deal search
   const[acctSearch,setAcctSearch]=useState("");
@@ -4170,6 +4171,9 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                 cost_price:succ.cost_price||0,
                 selling_price:succ.selling_price||0,
                 weight_g:succ.weight_g||0,
+                case_quantity:succ.case_quantity||0,
+                supplier:succ.supplier||"",
+                price_break_qty:succ.price_break_qty||0,
                 confidence:item.confidence||"high",
                 _replacedFrom:prod.jan,_replacedName:prod.name_en||prod.name_ja||""
               });
@@ -4184,6 +4188,9 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
             cost_price:prod.cost_price||0,
             selling_price:prod.selling_price||0,
             weight_g:prod.weight_g||0,
+            case_quantity:prod.case_quantity||0,
+            supplier:prod.supplier||"",
+            price_break_qty:prod.price_break_qty||0,
             confidence:item.confidence||"high",
             _isDiscontinued:prod.is_discontinued||false
           });
@@ -4348,7 +4355,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                 log.push({ok:true,text:`⚠ ${p.name_en||p.name_ja} (${jan}) は廃盤（後継品見つからず）`});
               }
             }
-            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0});
+            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0,case_quantity:p.case_quantity||0,supplier:p.supplier||"",price_break_qty:p.price_break_qty||0});
             if(!p.is_discontinued)log.push({ok:true,text:`✓ ${p.name_en||p.name_ja} (${p.jan}) × ${qty}`});
           }else{
             log.push({ok:false,text:`✗ JAN ${jan} が見つかりません`});
@@ -4362,7 +4369,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           const{data}=await client.from("product_master").select("*").or(`name_ja.ilike.${q},name_en.ilike.${q},brand.ilike.${q}`).limit(1);
           if(data&&data.length>0){
             const p=data[0];
-            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0});
+            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0,case_quantity:p.case_quantity||0,supplier:p.supplier||"",price_break_qty:p.price_break_qty||0});
             log.push({ok:true,text:`✓ "${searchText}" → ${p.name_en||p.name_ja} × ${qty}`});
           }else{
             log.push({ok:false,text:`✗ "${searchText}" → 該当商品なし`});
@@ -4453,7 +4460,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                 log.push({ok:true,text:`⚠ ${p.name_en||p.name_ja} (${janNum}) 廃盤（後継品見つからず）`});
               }
             }
-            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0});
+            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0,case_quantity:p.case_quantity||0,supplier:p.supplier||"",price_break_qty:p.price_break_qty||0});
             if(!p.is_discontinued)log.push({ok:true,text:`✓ ${p.name_en||p.name_ja} × ${qty}`});
             continue;
           }
@@ -4465,7 +4472,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           const{data}=await client.from("product_master").select("*").or(`name_ja.ilike.${q},name_en.ilike.${q}`).limit(1);
           if(data&&data.length>0){
             const p=data[0];
-            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0});
+            parsedItems.push({product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||p.name_en||"",quantity:qty,cost_price:p.cost_price||0,selling_price:p.selling_price||0,weight_g:p.weight_g||0,case_quantity:p.case_quantity||0,supplier:p.supplier||"",price_break_qty:p.price_break_qty||0});
             log.push({ok:true,text:`✓ "${rawName}" → ${p.name_en||p.name_ja} × ${qty}`});
             continue;
           }
@@ -4527,7 +4534,10 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       quantity:addQty,
       cost_price:p.cost_price||0,
       selling_price:p.selling_price||0,
-      weight_g:p.weight_g||0
+      weight_g:p.weight_g||0,
+      case_quantity:p.case_quantity||0,
+      supplier:p.supplier||"",
+      price_break_qty:p.price_break_qty||0
     };
     setDocItems(prev=>[...prev,newItem]);
     setSearchInput("");
@@ -5195,6 +5205,20 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
             </div>
           )}
 
+          <div style={{padding:12,background:T.borderLight,borderRadius:8}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.primary,marginBottom:8}}>為替レート</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>USD/JPY</div>
+                <input type="number" value={jpy_rate} onChange={e=>setJpyRate(parseFloat(e.target.value)||150)} step="0.1" style={{width:"100%",maxWidth:120,padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>USD/CAD</div>
+                <input type="number" value={cad_rate} onChange={e=>setCadRate(parseFloat(e.target.value)||1.37)} step="0.01" style={{width:"100%",maxWidth:120,padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              </div>
+            </div>
+          </div>
+
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
             <button onClick={()=>setStep(mode==="invoice"?4:4)} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
@@ -5262,18 +5286,25 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 
           {/* Product Detail Table */}
           <div style={{overflowX:"auto"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:1100}}>
               <thead>
-                <tr style={{background:"#111",color:"#fff"}}>
-                  <th style={{padding:"6px 8px",textAlign:"left",fontWeight:600,fontSize:10}}>商品名</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10,whiteSpace:"nowrap"}}>JAN</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>数量</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>単価(USD)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",fontWeight:600,fontSize:10}}>小計</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>原価(¥)</th>
-                  <th style={{padding:"6px 8px",textAlign:"right",fontWeight:600,fontSize:10}}>利益</th>
-                  <th style={{padding:"6px 8px",textAlign:"center",fontWeight:600,fontSize:10}}>率</th>
-                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:10,width:28}}></th>
+                <tr style={{background:"#1a365d",color:"#fff"}}>
+                  <th style={{padding:"6px 6px",textAlign:"left",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>JAN</th>
+                  <th style={{padding:"6px 6px",textAlign:"left",fontWeight:600,fontSize:9}}>商品名</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>ケース入数</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>仕入先</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>下代(税抜)</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>重さ(g)</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>価格変動数量</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>下代(税込)</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>利益率</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9}}>数量</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>提示価格(JPY)</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>提示価格(USD)</th>
+                  <th style={{padding:"6px 4px",textAlign:"center",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>提示価格(CAD)</th>
+                  <th style={{padding:"6px 4px",textAlign:"right",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>売上合計</th>
+                  <th style={{padding:"6px 4px",textAlign:"right",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}}>利益合計</th>
+                  <th style={{padding:"6px 2px",textAlign:"center",fontWeight:600,fontSize:9,width:24}}></th>
                 </tr>
               </thead>
               <tbody>
@@ -5282,18 +5313,31 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                   const costUsd=(item.cost_price||0)/jpy_rate;
                   const profit=(item.selling_price-costUsd)*item.quantity;
                   const margin=amt>0?(profit/amt)*100:0;
-                  const bg=i%2===0?"#f9f9f9":"#fff";
+                  const costTaxIncl=Math.round((item.cost_price||0)*1.1);
+                  const priceJpy=Math.round(item.selling_price*jpy_rate);
+                  const priceCad=(item.selling_price*cad_rate).toFixed(2);
+                  const salesTotal=Math.round(item.selling_price*item.quantity*jpy_rate);
+                  const profitJpy=Math.round(profit*jpy_rate);
+                  const bg=i%2===0?"#f0f6ff":"#fff";
+                  const csWarn=item.case_quantity>0&&item.quantity%item.case_quantity!==0;
                   return(
-                    <tr key={i} style={{background:bg,borderBottom:"1px solid #eee"}}>
-                      <td style={{padding:"6px 8px",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{item.name_en||item.name_ja}</td>
-                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.muted}}>{item.jan}</td>
-                      <td style={{padding:"4px 2px",textAlign:"center"}}><input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",e.target.value)} min="1" style={{width:48,padding:"3px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/></td>
-                      <td style={{padding:"4px 2px",textAlign:"center"}}><input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",e.target.value)} step="0.01" style={{width:64,padding:"3px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/></td>
-                      <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600}}>${amt.toFixed(2)}</td>
-                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.muted}}>¥{(item.cost_price||0).toLocaleString()}</td>
-                      <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:profit>=0?T.green:T.red}}>${profit.toFixed(2)}</td>
-                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,fontWeight:600,color:margin>=20?T.green:margin>=10?"#d97706":T.red}}>{margin.toFixed(1)}%</td>
-                      <td style={{padding:"4px 2px",textAlign:"center"}}><button onClick={()=>removeItem(i)} style={{background:"none",border:"none",fontSize:12,cursor:"pointer",color:T.red,padding:0}} title="削除">✕</button></td>
+                    <tr key={i} style={{background:bg,borderBottom:"1px solid #e2e8f0"}}>
+                      <td style={{padding:"5px 6px",fontSize:10,color:T.muted,whiteSpace:"nowrap"}}>{item.jan}</td>
+                      <td style={{padding:"5px 6px",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={item.name_en||item.name_ja}>{item.name_en||item.name_ja}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10,whiteSpace:"nowrap"}}>{item.case_quantity>0?item.case_quantity+"pcs":"-"}{csWarn?<span title={"数量がCS入数("+item.case_quantity+")の倍数ではありません"} style={{color:"#f59e0b",marginLeft:2,cursor:"help"}}>⚠</span>:null}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10,color:T.sub}}>{item.supplier||"-"}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10}}>¥{(item.cost_price||0).toLocaleString()}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10}}>{item.weight_g||0}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10}}>{item.price_break_qty>0?item.price_break_qty:"-"}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10}}>¥{costTaxIncl.toLocaleString()}</td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10,fontWeight:600,color:margin>=20?"#16a34a":margin>=10?"#d97706":"#dc2626"}}>{margin.toFixed(1)}%</td>
+                      <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",e.target.value)} min="1" style={{width:48,padding:"3px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/></td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10}}>¥{priceJpy.toLocaleString()}</td>
+                      <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",e.target.value)} step="0.01" style={{width:64,padding:"3px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/></td>
+                      <td style={{padding:"5px 4px",textAlign:"center",fontSize:10}}>${priceCad}</td>
+                      <td style={{padding:"5px 4px",textAlign:"right",fontSize:10,fontWeight:600}}>¥{salesTotal.toLocaleString()}</td>
+                      <td style={{padding:"5px 4px",textAlign:"right",fontSize:10,fontWeight:600,color:profitJpy>=0?"#16a34a":"#dc2626"}}>¥{profitJpy.toLocaleString()}</td>
+                      <td style={{padding:"3px 2px",textAlign:"center"}}><button onClick={()=>removeItem(i)} style={{background:"none",border:"none",fontSize:12,cursor:"pointer",color:"#dc2626",padding:0}} title="削除">✕</button></td>
                     </tr>
                   );
                 })}
@@ -5302,14 +5346,17 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           </div>
 
           {/* Totals Summary */}
-          <div style={{padding:12,background:"#111",borderRadius:8,color:"#fff"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:12,fontWeight:600}}>
-              <div>小計: ${subtotal.toFixed(2)}</div>
-              <div>配送料: ${shippingCost.toFixed(2)}</div>
-              <div style={{fontSize:14}}>合計 ({currency}): {currency==="USD"?"$":""}{grand.toFixed(2)}</div>
-              <div style={{color:"#4ade80"}}>利益: ${totalProfit.toFixed(2)} ({overallMarginPct.toFixed(1)}%)</div>
-              <div style={{fontSize:10,color:"#999"}}>総重量: {totalWeight.toFixed(2)} kg</div>
-              <div style={{fontSize:10,color:"#999"}}>商品数: {docItems.length}種 / {docItems.reduce((s,i)=>s+i.quantity,0)}個</div>
+          <div style={{padding:12,background:"#1a365d",borderRadius:8,color:"#fff"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,fontSize:12,fontWeight:600}}>
+              <div>小計(USD): ${subtotal.toFixed(2)}</div>
+              <div>配送料(USD): ${shippingCost.toFixed(2)}</div>
+              <div style={{fontSize:14}}>合計({currency}): {currency==="USD"?"$":""}{grand.toFixed(2)}</div>
+              <div>売上合計(JPY): ¥{Math.round(subtotal*jpy_rate).toLocaleString()}</div>
+              <div style={{color:"#4ade80"}}>利益合計(USD): ${totalProfit.toFixed(2)} ({overallMarginPct.toFixed(1)}%)</div>
+              <div style={{color:"#4ade80"}}>利益合計(JPY): ¥{Math.round(totalProfit*jpy_rate).toLocaleString()}</div>
+              <div style={{fontSize:10,color:"#a0aec0"}}>総重量: {totalWeight.toFixed(2)} kg</div>
+              <div style={{fontSize:10,color:"#a0aec0"}}>商品数: {docItems.length}種 / {docItems.reduce((s,i)=>s+i.quantity,0)}個</div>
+              <div style={{fontSize:10,color:"#a0aec0"}}>原価合計(JPY): ¥{totalCostJpy.toLocaleString()}</div>
             </div>
           </div>
 
