@@ -3915,7 +3915,7 @@ function CSVImporter({client,user,allUsers,accounts,onDone,currentBiz}){
 }
 
 // ── Quotation / Invoice Builder ──
-function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBack}){
+function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBack,initialDoc}){
   const IS_MOBILE=window.innerWidth<768;
 
   // State: Client Info
@@ -4069,6 +4069,46 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     window.addEventListener("popstate",handlePop);
     return()=>window.removeEventListener("popstate",handlePop);
   },[]);
+
+  // Pre-fill from initialDoc (e.g. creating invoice from quotation)
+  useEffect(()=>{
+    if(!initialDoc)return;
+    // Restore client info
+    if(initialDoc.client_info){
+      const ci=initialDoc.client_info;
+      setClientInfo({companyName:ci.companyName||"",address:ci.address||"",city:ci.city||"",country:ci.country||"",phone:ci.phone||"",contactPerson:ci.contactPerson||"",email:ci.email||""});
+      if(ci.shipping_country)setShippingCountry(ci.shipping_country);
+      if(ci.exchange_rate)setCurrencyRate(ci.exchange_rate);
+      if(ci.shipping_breakdown)setShippingBreakdown(ci.shipping_breakdown);
+    }
+    // Restore account/deal/contact
+    if(initialDoc.account_id){
+      const acct=(accounts||[]).find(a=>a.id===initialDoc.account_id);
+      if(acct)setSelectedAccount(acct);
+    }
+    if(initialDoc.deal_id){
+      const d=(deals||[]).find(d=>d.id===initialDoc.deal_id);
+      if(d)setSelectedDeal(d);
+    }
+    if(initialDoc.contact_id){
+      const ct=(contacts||[]).find(c=>c.id===initialDoc.contact_id);
+      if(ct)setSelectedContact(ct);
+    }
+    // Restore items
+    if(initialDoc.items&&initialDoc.items.length>0){
+      setDocItems(initialDoc.items.map(item=>({...item})));
+    }
+    // Restore shipping/incoterm/carrier
+    if(initialDoc.incoterm)setIncoterm(initialDoc.incoterm);
+    if(initialDoc.carrier)setCarrier(initialDoc.carrier);
+    if(initialDoc.service)setService(initialDoc.service);
+    if(initialDoc.shipping!=null)setShippingCost(initialDoc.shipping);
+    if(initialDoc.currency)setCurrency(initialDoc.currency);
+    if(initialDoc.notes)setNotes(initialDoc.notes);
+    // Jump to currency step for invoice (step 4), summary for quotation (step 4)
+    _setStep(4);
+  },[]);
+
   const searchTimer=useRef(null);
 
   // Auto-generate doc number (with company name)
@@ -5651,7 +5691,7 @@ return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:I
 
 
 // ── Document List View (書類一覧) ──
-function DocumentListView({client,user,accounts,deals,onBack}){
+function DocumentListView({client,user,accounts,deals,onBack,onCreateInvoice}){
 const IS_MOBILE=window.innerWidth<768;
 const[docs,setDocs]=useState([]);
 const[loading,setLoading]=useState(true);
@@ -5776,10 +5816,15 @@ return(
             <div style={{fontSize:11,color:T.sub}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</div>
           </div>
         </div>
-        {/* Sync button */}
-        <button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"6px 14px",borderRadius:8,border:"none",background:doc.deal_id?(T.green||"#22c55e"):T.border,color:doc.deal_id?"#fff":T.muted,fontSize:11,fontWeight:700,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,whiteSpace:"nowrap",fontFamily:"inherit"}}>
-          {isSyncing?"反映中...":"発注に反映"}
-        </button>
+        {/* Action buttons */}
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {doc.doc_type==="quotation"&&<button onClick={()=>onCreateInvoice&&onCreateInvoice(doc)} style={{padding:"6px 14px",borderRadius:8,border:"none",background:T.accent||"#f59e0b",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>
+            請求書を作成
+          </button>}
+          {doc.doc_type==="invoice"&&<button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"6px 14px",borderRadius:8,border:"none",background:doc.deal_id?(T.green||"#22c55e"):T.border,color:doc.deal_id?"#fff":T.muted,fontSize:11,fontWeight:700,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,whiteSpace:"nowrap",fontFamily:"inherit"}}>
+            {isSyncing?"反映中...":"発注に反映"}
+          </button>}
+        </div>
       </div>
       );
     })}
@@ -5794,6 +5839,7 @@ function DocumentsPage({client,user,allUsers,accounts,contacts,deals}){
 const IS_MOBILE=window.innerWidth<768;
 const DEFAULT_JPY_RATE=150;
 const[docPage,_setDocPage]=useState("menu");
+const[prefillDoc,setPrefillDoc]=useState(null);
 const setDocPage=(pg)=>{
   _setDocPage(pg);
   if(pg==="menu"){
@@ -6094,7 +6140,7 @@ if(docPage==="master"){return(
 
 // ── Quotation & Invoice → QuotationInvoiceBuilder ──
 if(docPage==="quotation"||docPage==="invoice"){
-return <QuotationInvoiceBuilder mode={docPage} client={client} user={user} accounts={accounts} contacts={contacts} deals={deals} onBack={()=>setDocPage("menu")}/>;
+return <QuotationInvoiceBuilder key={prefillDoc?.id||docPage} mode={docPage} client={client} user={user} accounts={accounts} contacts={contacts} deals={deals} onBack={()=>{setPrefillDoc(null);setDocPage("menu")}} initialDoc={prefillDoc}/>;
 }
 
 // ── Order Management (embedded in documents) ──
@@ -6109,7 +6155,7 @@ return <div style={{position:"relative"}}>
 
 // ── Document List (書類一覧) ──
 if(docPage==="doc_list"){
-return <DocumentListView client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")}/>;
+return <DocumentListView client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")} onCreateInvoice={(doc)=>{setPrefillDoc(doc);setDocPage("invoice")}}/>;
 }
 
 // ── Delivery Note placeholder (Phase 3) ──
