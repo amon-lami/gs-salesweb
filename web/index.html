@@ -5670,6 +5670,547 @@ return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:I
 }
 
 
+// ── Delivery Note Builder (納品書作成) ──
+function DeliveryNoteBuilder({client,user,accounts,contacts,deals,onBack}){
+const IS_MOBILE=window.innerWidth<768;
+const[step,_setStep]=useState(1);
+const setStep=(s)=>{_setStep(s);window.history.pushState({_gs:true,view:"deliveryBuilder",step:s},"")};
+useEffect(()=>{
+  window.history.pushState({_gs:true,view:"deliveryBuilder",step:1},"");
+  const h=(e)=>{const st=e.state;if(st&&st._gs&&st.view==="deliveryBuilder")_setStep(st.step);else if(st&&st._gs&&st.view==="docPage")onBack?.()};
+  window.addEventListener("popstate",h);return()=>window.removeEventListener("popstate",h);
+},[]);
+
+// Client state
+const[selectedAccount,setSelectedAccount]=useState(null);
+const[selectedContact,setSelectedContact]=useState(null);
+const[clientInfo,setClientInfo]=useState({companyName:"",address:"",contactPerson:"",email:"",phone:""});
+const[acctSearch,setAcctSearch]=useState("");
+const[acctDropOpen,setAcctDropOpen]=useState(false);
+const acctDropRef=useRef(null);
+
+// Items state
+const[items,setItems]=useState([]);
+const[inputMode,setInputMode]=useState("search"); // "search"|"text"|"ai"
+const[searchInput,setSearchInput]=useState("");
+const[searchResults,setSearchResults]=useState([]);
+const[searching,setSearching]=useState(false);
+const[textInput,setTextInput]=useState("");
+const[parsing,setParsing]=useState(false);
+const[parseLog,setParseLog]=useState([]);
+
+// AI state
+const[aiMessages,setAiMessages]=useState([{role:"ai",text:"発注書ファイル（Excel/PDF）をアップロードするか、テキストを貼り付けてください。商品と数量を自動解析します。"}]);
+const[aiInput,setAiInput]=useState("");
+const[aiProcessing,setAiProcessing]=useState(false);
+const[aiPendingItems,setAiPendingItems]=useState(null);
+const[dragOver,setDragOver]=useState(false);
+const aiFileRef=useRef(null);
+const aiChatEndRef=useRef(null);
+
+// BOX state
+const[boxes,setBoxes]=useState([{id:1,name:"BOX 1",itemIndices:[]}]);
+const[nextBoxId,setNextBoxId]=useState(2);
+
+// Output state
+const[outputLang,setOutputLang]=useState("en"); // "en"|"ja"
+const[outputFormat,setOutputFormat]=useState("excel"); // "excel"|"pdf"
+const[generating,setGenerating]=useState(false);
+
+const searchTimer=useRef(null);
+
+// Dropdown close
+useEffect(()=>{
+  const h=(e)=>{if(acctDropRef.current&&!acctDropRef.current.contains(e.target))setAcctDropOpen(false)};
+  document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);
+},[]);
+
+const filteredAccounts=useMemo(()=>{
+  if(!acctSearch)return(accounts||[]).slice(0,20);
+  const q=acctSearch.toLowerCase();
+  return(accounts||[]).filter(a=>a.name?.toLowerCase().includes(q)).slice(0,20);
+},[accounts,acctSearch]);
+
+const handleSelectAccount=(acc)=>{
+  setSelectedAccount(acc);
+  setClientInfo({companyName:acc.name||"",address:acc.address||"",contactPerson:"",email:"",phone:acc.phone||""});
+  setSelectedContact(null);
+};
+
+// Product search
+const handleSearch=useCallback(async()=>{
+  if(!searchInput.trim()||!client){setSearchResults([]);return}
+  setSearching(true);
+  try{
+    const q=`%${searchInput}%`;
+    const{data}=await client.from("product_master").select("*").or(`name_ja.ilike.${q},name_en.ilike.${q},jan.ilike.${q},brand.ilike.${q}`).limit(10);
+    setSearchResults(data||[]);
+  }catch(e){console.error(e)}
+  setSearching(false);
+},[searchInput,client]);
+
+useEffect(()=>{
+  if(searchTimer.current)clearTimeout(searchTimer.current);
+  if(searchInput.trim())searchTimer.current=setTimeout(handleSearch,400);
+  else setSearchResults([]);
+  return()=>{if(searchTimer.current)clearTimeout(searchTimer.current)};
+},[searchInput]);
+
+const addProduct=(p,qty)=>{
+  setItems(prev=>[...prev,{product_id:p.id,jan:p.jan,name_en:p.name_en||p.name_ja||"",name_ja:p.name_ja||"",quantity:qty||1,ingredients_en:p.ingredients_en||"",weight_g:p.weight_g||0,case_quantity:p.case_quantity||0,brand:p.brand||""}]);
+  setSearchInput("");setSearchResults([]);
+};
+
+// Text parse (JAN + qty)
+const parseText=async()=>{
+  if(!textInput.trim()||!client)return;
+  setParsing(true);setParseLog([]);
+  const log=[];const lines=textInput.trim().split(/\n/).filter(l=>l.trim());
+  const newItems=[];
+  for(const line of lines){
+    const parts=line.trim().split(/[\s\t,;×x]+/i).filter(Boolean);
+    if(parts.length===0)continue;
+    let jan=parts[0].replace(/\.0$/,"").replace(/[^\d]/g,"");
+    let qty=parts.length>1?parseInt(parts[parts.length-1])||1:1;
+    if(jan.length>=8){
+      const{data}=await client.from("product_master").select("*").eq("jan",jan).limit(1);
+      if(data&&data[0]){
+        newItems.push({product_id:data[0].id,jan:data[0].jan,name_en:data[0].name_en||data[0].name_ja||"",name_ja:data[0].name_ja||"",quantity:qty,ingredients_en:data[0].ingredients_en||"",weight_g:data[0].weight_g||0,case_quantity:data[0].case_quantity||0,brand:data[0].brand||""});
+        log.push({text:`✓ ${jan} → ${data[0].name_en||data[0].name_ja} × ${qty}`,ok:true});
+      }else{
+        log.push({text:`✗ ${jan} — 商品が見つかりません`,ok:false});
+      }
+    }else{
+      // Try name search
+      const{data}=await client.from("product_master").select("*").or(`name_en.ilike.%${parts[0]}%,name_ja.ilike.%${parts[0]}%`).limit(1);
+      if(data&&data[0]){
+        newItems.push({product_id:data[0].id,jan:data[0].jan,name_en:data[0].name_en||data[0].name_ja||"",name_ja:data[0].name_ja||"",quantity:qty,ingredients_en:data[0].ingredients_en||"",weight_g:data[0].weight_g||0,case_quantity:data[0].case_quantity||0,brand:data[0].brand||""});
+        log.push({text:`✓ ${parts[0]} → ${data[0].name_en||data[0].name_ja} × ${qty}`,ok:true});
+      }else{
+        log.push({text:`✗ ${line.trim()} — 見つかりません`,ok:false});
+      }
+    }
+  }
+  if(newItems.length>0)setItems(prev=>[...prev,...newItems]);
+  setParseLog(log);setParsing(false);
+};
+
+// GS-AI file handling (reuse same pattern as QuotationInvoiceBuilder)
+const handleAiFile=async(file)=>{
+  if(!file)return;
+  if(file.size>10*1024*1024){setAiMessages(prev=>[...prev,{role:"ai",text:"⚠️ ファイルサイズが10MBを超えています。"}]);return}
+  const ext=file.name.split(".").pop().toLowerCase();
+  setAiMessages(prev=>[...prev,{role:"user",text:`📎 ${file.name}`}]);
+  if(ext==="csv"||ext==="tsv"){
+    const text=await file.text();
+    await handleAiSubmit(text,null,null);
+  }else if(ext==="xlsx"||ext==="xls"){
+    if(!window.XLSX){const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";document.head.appendChild(s);await new Promise(r=>s.onload=r)}
+    const buf=await file.arrayBuffer();const wb=window.XLSX.read(buf,{type:"array"});const ws=wb.Sheets[wb.SheetNames[0]];const csvText=window.XLSX.utils.sheet_to_csv(ws);
+    await handleAiSubmit(`ファイル名: ${file.name}\n\n${csvText}`,null,null);
+  }else if(["pdf","png","jpg","jpeg"].includes(ext)){
+    const buf=await file.arrayBuffer();const b64=btoa(new Uint8Array(buf).reduce((d,b)=>d+String.fromCharCode(b),""));
+    const mimeMap={pdf:"application/pdf",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg"};
+    await handleAiSubmit(null,b64,mimeMap[ext]);
+  }else{setAiMessages(prev=>[...prev,{role:"ai",text:`⚠️ 未対応の形式: .${ext}\n対応: xlsx, csv, tsv, pdf, png, jpg`}])}
+};
+
+const handleAiSubmit=async(text,fileBase64,fileType)=>{
+  if(!text&&!fileBase64)return;
+  if(text&&!fileBase64)setAiMessages(prev=>[...prev,{role:"user",text:text.substring(0,200)+(text.length>200?"...":"")}]);
+  setAiProcessing(true);
+  try{
+    const{data:cfg}=await client.from("company_settings").select("value").eq("key","receipt_ocr_config").single();
+    const apiKey=cfg?.value?.api_key;
+    if(!apiKey)throw new Error("APIキー未設定");
+    const{data:prods}=await client.from("product_master").select("jan,name_en,brand").limit(200);
+    const hints=(prods||[]).map(p=>`${p.jan} | ${p.name_en} | ${p.brand}`).join("\n");
+    const res=await fetch("https://yzwrumeukjidsguixqxr.supabase.co/functions/v1/order-parse",{
+      method:"POST",headers:{"Content-Type":"application/json","Authorization":`Bearer ${(await client.auth.getSession()).data.session.access_token}`},
+      body:JSON.stringify({text,file_base64:fileBase64,file_type:fileType,api_key:apiKey,product_hints:hints})
+    });
+    const result=await res.json();
+    if(result.error)throw new Error(result.error);
+    if(result.items&&result.items.length>0){
+      // Resolve items
+      const resolved=[];
+      for(const ri of result.items){
+        const jan=(ri.jan||"").replace(/\.0$/,"").replace(/[^\d]/g,"");
+        if(jan.length>=8){
+          const{data}=await client.from("product_master").select("*").eq("jan",jan).limit(1);
+          if(data&&data[0]){resolved.push({product_id:data[0].id,jan:data[0].jan,name_en:data[0].name_en||"",name_ja:data[0].name_ja||"",quantity:ri.quantity||1,ingredients_en:data[0].ingredients_en||"",weight_g:data[0].weight_g||0,case_quantity:data[0].case_quantity||0,brand:data[0].brand||""});continue}
+        }
+        if(ri.name){
+          const{data}=await client.from("product_master").select("*").or(`name_en.ilike.%${ri.name}%,name_ja.ilike.%${ri.name}%`).limit(1);
+          if(data&&data[0]){resolved.push({product_id:data[0].id,jan:data[0].jan,name_en:data[0].name_en||"",name_ja:data[0].name_ja||"",quantity:ri.quantity||1,ingredients_en:data[0].ingredients_en||"",weight_g:data[0].weight_g||0,case_quantity:data[0].case_quantity||0,brand:data[0].brand||""});continue}
+        }
+        resolved.push({product_id:null,jan:ri.jan||"",name_en:ri.name||"",name_ja:"",quantity:ri.quantity||1,ingredients_en:"",weight_g:0,case_quantity:0,brand:""});
+      }
+      setAiPendingItems(resolved);
+      setAiMessages(prev=>[...prev,{role:"ai",text:`${resolved.length}件の商品を解析しました。追加しますか？`}]);
+    }else{
+      setAiMessages(prev=>[...prev,{role:"ai",text:"商品を検出できませんでした。別のフォーマットで試してください。"}]);
+    }
+  }catch(err){setAiMessages(prev=>[...prev,{role:"ai",text:`エラー: ${err.message}`}])}
+  setAiProcessing(false);
+};
+
+useEffect(()=>{aiChatEndRef.current?.scrollIntoView({behavior:"smooth"})},[aiMessages]);
+
+// BOX management
+const addBox=()=>{setBoxes(prev=>[...prev,{id:nextBoxId,name:`BOX ${nextBoxId}`,itemIndices:[]}]);setNextBoxId(p=>p+1)};
+const removeBox=(boxId)=>{if(boxes.length<=1)return;setBoxes(prev=>{const box=prev.find(b=>b.id===boxId);const freed=box?box.itemIndices:[];return prev.filter(b=>b.id!==boxId)})};
+const assignToBox=(boxId,itemIdx)=>{
+  setBoxes(prev=>prev.map(b=>({...b,itemIndices:b.id===boxId?[...new Set([...b.itemIndices,itemIdx])]:b.itemIndices.filter(i=>i!==itemIdx)})));
+};
+const removeFromBox=(boxId,itemIdx)=>{
+  setBoxes(prev=>prev.map(b=>b.id===boxId?{...b,itemIndices:b.itemIndices.filter(i=>i!==itemIdx)}:b));
+};
+const unassignedIndices=useMemo(()=>{
+  const assigned=new Set(boxes.flatMap(b=>b.itemIndices));
+  return items.map((_,i)=>i).filter(i=>!assigned.has(i));
+},[items,boxes]);
+
+const autoAssign=()=>{
+  if(items.length===0)return;
+  const perBox=Math.ceil(items.length/boxes.length);
+  setBoxes(prev=>prev.map((b,bi)=>({...b,itemIndices:items.map((_,i)=>i).slice(bi*perBox,Math.min((bi+1)*perBox,items.length))})));
+};
+
+// Generate Delivery Note
+const generateDeliveryNote=async()=>{
+  if(items.length===0){alert("商品を追加してください。");return}
+  setGenerating(true);
+  try{
+    if(!window.ExcelJS){const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";document.head.appendChild(s);await new Promise(r=>s.onload=r)}
+    const wb=new window.ExcelJS.Workbook();
+    const isEn=outputLang==="en";
+    const borderThin={top:{style:"thin"},left:{style:"thin"},bottom:{style:"thin"},right:{style:"thin"}};
+    const hdrFill={type:"pattern",pattern:"solid",fgColor:{argb:"FF1a1a1a"}};
+    const hdrFont={color:{argb:"FFFFFFFF"},bold:true,size:9,name:"Arial"};
+
+    // For each BOX, create a packing list sheet + ingredient sheet
+    const sortedBoxes=boxes.filter(b=>b.itemIndices.length>0);
+    const allInOneBox=sortedBoxes.length===0;
+    const effectiveBoxes=allInOneBox?[{id:0,name:"BOX 1",itemIndices:items.map((_,i)=>i)}]:sortedBoxes;
+
+    effectiveBoxes.forEach((box,bi)=>{
+      // Packing List sheet
+      const sheetName=isEn?`Packing List ${box.name}`:`納品書 ${box.name}`;
+      const ws=wb.addWorksheet(sheetName);
+      ws.columns=[{width:5},{width:18},{width:28},{width:10},{width:10},{width:12}];
+
+      // Header
+      const titleRow=ws.addRow([isEn?"PACKING LIST":"納品書"]);
+      titleRow.getCell(1).font={size:18,bold:true,name:"Arial"};
+      ws.mergeCells(ws.rowCount,1,ws.rowCount,6);
+      ws.addRow([box.name]);
+      ws.getRow(ws.rowCount).getCell(1).font={size:12,bold:true,color:{argb:"FF666666"},name:"Arial"};
+      ws.addRow([]);
+
+      // Client info
+      if(clientInfo.companyName){
+        ws.addRow([isEn?"To:":"宛先:",clientInfo.companyName]);
+        ws.getRow(ws.rowCount).getCell(1).font={bold:true,size:10,name:"Arial"};
+        ws.getRow(ws.rowCount).getCell(2).font={size:10,name:"Arial"};
+      }
+      if(clientInfo.contactPerson){ws.addRow(["",clientInfo.contactPerson]);ws.getRow(ws.rowCount).getCell(2).font={size:10,name:"Arial"}}
+      if(clientInfo.address){ws.addRow(["",clientInfo.address]);ws.getRow(ws.rowCount).getCell(2).font={size:10,name:"Arial"}}
+      ws.addRow([]);
+      ws.addRow([isEn?"Date:":"日付:",new Date().toLocaleDateString(isEn?"en-US":"ja-JP")]);
+      ws.getRow(ws.rowCount).getCell(1).font={bold:true,size:10,name:"Arial"};
+      ws.addRow([]);
+
+      // Table header
+      const headers=[isEn?"No.":"No.",isEn?"JAN":"JAN",isEn?"Product Name":"商品名",isEn?"Qty":"数量",isEn?"Weight(g)":"重量(g)",isEn?"Brand":"ブランド"];
+      const hRow=ws.addRow(headers);
+      hRow.eachCell(c=>{c.fill=hdrFill;c.font=hdrFont;c.border=borderThin;c.alignment={horizontal:"center",vertical:"middle"}});
+
+      // Items
+      const boxItems=box.itemIndices.map(i=>items[i]).filter(Boolean);
+      let totalQty=0,totalWeight=0;
+      boxItems.forEach((item,idx)=>{
+        const r=ws.addRow([idx+1,item.jan||"",isEn?(item.name_en||item.name_ja):(item.name_ja||item.name_en),item.quantity,item.weight_g||0,item.brand||""]);
+        r.eachCell(c=>{c.border=borderThin;c.font={size:10,name:"Arial"};c.alignment={vertical:"middle"}});
+        r.getCell(1).alignment={horizontal:"center"};
+        r.getCell(4).alignment={horizontal:"center"};
+        r.getCell(5).alignment={horizontal:"center"};
+        if(idx%2===0){r.eachCell(c=>{c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF5F5F5"}}})}
+        totalQty+=item.quantity;totalWeight+=(item.weight_g||0)*item.quantity;
+      });
+
+      // Total row
+      ws.addRow([]);
+      const totRow=ws.addRow(["","",(isEn?"Total":"合計"),totalQty,(totalWeight/1000).toFixed(2)+"kg",""]);
+      totRow.eachCell(c=>{c.font={size:10,bold:true,name:"Arial"};c.border={top:{style:"double"}}});
+
+      // Ingredients sheet for this box
+      const ingredientItems=boxItems.filter(it=>it.ingredients_en&&it.ingredients_en.trim());
+      if(ingredientItems.length>0){
+        const iSheetName=isEn?`Ingredients ${box.name}`:`成分表 ${box.name}`;
+        const iws=wb.addWorksheet(iSheetName);
+        iws.columns=[{width:5},{width:22},{width:60}];
+        const iTitleRow=iws.addRow([isEn?"INGREDIENT LIST":"成分表"]);
+        iTitleRow.getCell(1).font={size:16,bold:true,name:"Arial"};
+        iws.mergeCells(1,1,1,3);
+        iws.addRow([box.name]);
+        iws.getRow(iws.rowCount).getCell(1).font={size:11,bold:true,color:{argb:"FF666666"},name:"Arial"};
+        iws.addRow([]);
+        const iHRow=iws.addRow([isEn?"No.":"No.",isEn?"Product":"商品名",isEn?"Ingredients":"成分"]);
+        iHRow.eachCell(c=>{c.fill=hdrFill;c.font=hdrFont;c.border=borderThin;c.alignment={horizontal:"center",vertical:"middle"}});
+        ingredientItems.forEach((item,idx)=>{
+          const r=iws.addRow([idx+1,isEn?(item.name_en||item.name_ja):(item.name_ja||item.name_en),item.ingredients_en]);
+          r.eachCell(c=>{c.border=borderThin;c.font={size:9,name:"Arial"};c.alignment={vertical:"top",wrapText:true}});
+          r.getCell(1).alignment={horizontal:"center",vertical:"top"};
+          if(idx%2===0)r.eachCell(c=>{c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFF9F9F9"}}});
+          r.height=Math.max(20,Math.ceil((item.ingredients_en||"").length/80)*14);
+        });
+      }
+    });
+
+    // Download
+    const buf=await wb.xlsx.writeBuffer();
+    const blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`PackingList_${clientInfo.companyName||"delivery"}_${new Date().toISOString().split("T")[0]}.xlsx`;
+    a.click();URL.revokeObjectURL(url);
+  }catch(err){alert("生成エラー: "+err.message)}
+  setGenerating(false);
+};
+
+const stepLabels=["取引先","商品入力","BOX分け","出力"];
+
+return(
+<div style={{padding:IS_MOBILE?8:16,background:T.bg,minHeight:"100%",display:"flex",flexDirection:"column",gap:12}}>
+  {/* Header */}
+  <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"space-between"}}>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <button onClick={()=>{if(step>1)window.history.back();else onBack?.()}} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
+      <h2 style={{margin:0,fontSize:15,fontWeight:700,color:T.primary}}>納品書作成</h2>
+    </div>
+    <div style={{display:"flex",gap:4}}>
+      {stepLabels.map((l,i)=><div key={i} style={{padding:"3px 10px",borderRadius:12,fontSize:10,fontWeight:600,background:step===i+1?T.primary:"transparent",color:step===i+1?"#fff":T.muted,border:`1px solid ${step===i+1?T.primary:T.border}`}}>{i+1}. {l}</div>)}
+    </div>
+  </div>
+
+  {/* Step 1: Client Info */}
+  {step===1&&(
+    <div style={{background:T.card,borderRadius:12,padding:16,display:"flex",flexDirection:"column",gap:12}}>
+      <div ref={acctDropRef} style={{position:"relative"}}>
+        <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>取引先</div>
+        <input value={acctDropOpen?acctSearch:(selectedAccount?.name||"")} onChange={e=>{setAcctSearch(e.target.value);setAcctDropOpen(true)}} onFocus={()=>{setAcctSearch("");setAcctDropOpen(true)}} placeholder="取引先名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${acctDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+        {selectedAccount&&!acctDropOpen&&<button onClick={()=>{setSelectedAccount(null);setClientInfo({companyName:"",address:"",contactPerson:"",email:"",phone:""})}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
+        {acctDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
+          {filteredAccounts.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当なし</div>}
+          {filteredAccounts.map(a=><div key={a.id} onClick={()=>{handleSelectAccount(a);setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",borderBottom:`1px solid ${T.border}22`}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"10"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{a.name}</div>)}
+        </div>}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:8}}>
+        <div><div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>会社名</div><input value={clientInfo.companyName} onChange={e=>setClientInfo(p=>({...p,companyName:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/></div>
+        <div><div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>担当者</div><input value={clientInfo.contactPerson} onChange={e=>setClientInfo(p=>({...p,contactPerson:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/></div>
+        <div><div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>住所</div><input value={clientInfo.address} onChange={e=>setClientInfo(p=>({...p,address:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/></div>
+        <div><div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>メール</div><input value={clientInfo.email} onChange={e=>setClientInfo(p=>({...p,email:e.target.value}))} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/></div>
+      </div>
+      <button onClick={()=>setStep(2)} style={{padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
+    </div>
+  )}
+
+  {/* Step 2: Product Input */}
+  {step===2&&(
+    <div style={{background:T.card,borderRadius:12,padding:16,display:"flex",flexDirection:"column",gap:12}}>
+      {/* Mode tabs */}
+      <div style={{display:"flex",gap:4}}>
+        {[{id:"search",label:"商品検索"},{id:"text",label:"テキスト入力"},{id:"ai",label:"GS-AI（ファイル）"}].map(m=>(
+          <button key={m.id} onClick={()=>setInputMode(m.id)} style={{flex:1,padding:"6px 8px",borderRadius:6,border:`1px solid ${inputMode===m.id?T.primary:T.border}`,background:inputMode===m.id?T.primary+"12":"transparent",color:inputMode===m.id?T.primary:T.muted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{m.label}</button>
+        ))}
+      </div>
+
+      {/* Search mode */}
+      {inputMode==="search"&&<div>
+        <input value={searchInput} onChange={e=>setSearchInput(e.target.value)} placeholder="商品名 / JAN / ブランドで検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",marginBottom:8,boxSizing:"border-box"}}/>
+        {searching&&<div style={{fontSize:10,color:T.muted}}>検索中...</div>}
+        {searchResults.map(p=>(
+          <div key={p.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 8px",borderBottom:`1px solid ${T.border}`,fontSize:11}}>
+            <div><span style={{fontWeight:600,color:T.text}}>{p.name_en||p.name_ja}</span><span style={{color:T.muted,marginLeft:6,fontSize:10}}>{p.jan}</span></div>
+            <button onClick={()=>addProduct(p,1)} style={{padding:"3px 10px",borderRadius:4,border:"none",background:T.primary,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer"}}>+追加</button>
+          </div>
+        ))}
+      </div>}
+
+      {/* Text mode */}
+      {inputMode==="text"&&<div>
+        <textarea value={textInput} onChange={e=>setTextInput(e.target.value)} placeholder={"JAN 数量（1行ずつ）\n例:\n4550516493583 5\n4550516279623 3"} style={{width:"100%",minHeight:120,padding:10,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"monospace",resize:"vertical",boxSizing:"border-box"}}/>
+        <div style={{display:"flex",gap:8,marginTop:8}}>
+          <button onClick={parseText} disabled={parsing} style={{flex:1,padding:8,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>{parsing?"解析中...":"解析して追加"}</button>
+        </div>
+        {parseLog.length>0&&<div style={{marginTop:8,padding:8,background:T.bg,borderRadius:6,maxHeight:150,overflowY:"auto"}}>{parseLog.map((l,i)=><div key={i} style={{fontSize:10,color:l.ok?"#16a34a":"#dc2626",marginBottom:2}}>{l.text}</div>)}</div>}
+      </div>}
+
+      {/* AI mode */}
+      {inputMode==="ai"&&<div>
+        <div style={{border:`2px dashed ${dragOver?T.primary:T.border}`,borderRadius:8,padding:12,minHeight:200,maxHeight:300,overflowY:"auto",background:dragOver?T.primary+"08":T.bg,transition:"all .2s"}}
+          onDragOver={e=>{e.preventDefault();setDragOver(true)}} onDragLeave={()=>setDragOver(false)}
+          onDrop={e=>{e.preventDefault();setDragOver(false);const f=e.dataTransfer.files[0];if(f)handleAiFile(f)}}>
+          {aiMessages.map((m,i)=><div key={i} style={{marginBottom:6,padding:"6px 10px",borderRadius:8,background:m.role==="user"?T.primary+"12":T.card,fontSize:11,color:m.role==="user"?T.primary:T.text,maxWidth:"85%",marginLeft:m.role==="user"?"auto":0,wordBreak:"break-word",whiteSpace:"pre-wrap"}}>{m.text}</div>)}
+          {aiProcessing&&<div style={{fontSize:10,color:T.muted,padding:6}}>解析中...</div>}
+          <div ref={aiChatEndRef}/>
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <input value={aiInput} onChange={e=>setAiInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&aiInput.trim()){e.preventDefault();handleAiSubmit(aiInput,null,null);setAiInput("")}}} placeholder="テキストを貼り付け..." style={{flex:1,padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}}/>
+          <button onClick={()=>{if(aiInput.trim()){handleAiSubmit(aiInput,null,null);setAiInput("")}}} disabled={aiProcessing} style={{padding:"6px 12px",borderRadius:6,border:"none",background:T.primary,color:"#fff",fontSize:11,fontWeight:600,cursor:"pointer"}}>送信</button>
+          <button onClick={()=>aiFileRef.current?.click()} style={{padding:"6px 10px",borderRadius:6,border:`1px solid ${T.border}`,background:T.card,fontSize:13,cursor:"pointer"}}>📎</button>
+          <input ref={aiFileRef} type="file" accept=".xlsx,.xls,.csv,.tsv,.pdf,.png,.jpg,.jpeg" onChange={e=>{const f=e.target.files?.[0];if(f)handleAiFile(f);e.target.value=""}} style={{display:"none"}}/>
+        </div>
+        {aiPendingItems&&<div style={{marginTop:8,display:"flex",gap:6}}>
+          <button onClick={()=>{setItems(prev=>[...prev,...aiPendingItems]);setAiPendingItems(null);setAiMessages(prev=>[...prev,{role:"ai",text:`${aiPendingItems.length}件を追加しました。`}])}} style={{flex:1,padding:8,background:T.green||"#22c55e",color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>追加する ({aiPendingItems.length}件)</button>
+          <button onClick={()=>{setAiPendingItems(null);setAiMessages(prev=>[...prev,{role:"ai",text:"キャンセルしました。"}])}} style={{padding:8,background:T.border,color:T.sub,border:"none",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>やり直す</button>
+        </div>}
+      </div>}
+
+      {/* Current items list */}
+      {items.length>0&&<div>
+        <div style={{fontSize:11,fontWeight:700,color:T.sub,marginBottom:6}}>追加済み商品 ({items.length}件)</div>
+        <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+          {items.map((item,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderBottom:`1px solid ${T.border}`,fontSize:11,background:i%2===0?"transparent":T.bg}}>
+              <span style={{color:T.muted,fontSize:10,minWidth:30}}>{item.jan}</span>
+              <span style={{flex:1,color:T.text,fontWeight:500}}>{item.name_en||item.name_ja}</span>
+              <input type="number" value={item.quantity} onChange={e=>{const v=parseInt(e.target.value)||1;setItems(prev=>prev.map((it,idx)=>idx===i?{...it,quantity:v}:it))}} min="1" style={{width:48,padding:"2px 4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit"}}/>
+              {item.ingredients_en?<span style={{fontSize:9,color:T.green||"#22c55e"}} title="成分データあり">✓成分</span>:<span style={{fontSize:9,color:T.muted}}>—</span>}
+              <button onClick={()=>setItems(prev=>prev.filter((_,idx)=>idx!==i))} style={{background:"none",border:"none",fontSize:12,cursor:"pointer",color:T.muted,padding:0}}>✕</button>
+            </div>
+          ))}
+        </div>
+      </div>}
+
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+        <button onClick={()=>{if(items.length===0){alert("商品を追加してください。");return}setStep(3)}} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ → BOX分け</button>
+      </div>
+    </div>
+  )}
+
+  {/* Step 3: BOX Grouping */}
+  {step===3&&(
+    <div style={{background:T.card,borderRadius:12,padding:16,display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+        <div style={{fontSize:12,fontWeight:700,color:T.sub}}>BOXグルーピング</div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={autoAssign} style={{padding:"4px 12px",borderRadius:6,border:`1px solid ${T.border}`,background:T.bg,fontSize:10,fontWeight:600,cursor:"pointer",color:T.sub,fontFamily:"inherit"}}>自動振り分け</button>
+          <button onClick={addBox} style={{padding:"4px 12px",borderRadius:6,border:"none",background:T.primary,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+ BOX追加</button>
+        </div>
+      </div>
+
+      {/* Unassigned items */}
+      {unassignedIndices.length>0&&<div style={{padding:10,background:T.bg,borderRadius:8,border:`1px dashed ${T.border}`}}>
+        <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:6}}>未割当 ({unassignedIndices.length}件)</div>
+        {unassignedIndices.map(idx=>{
+          const item=items[idx];
+          return <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 0",fontSize:11}}>
+            <span style={{flex:1,color:T.text}}>{item.name_en||item.name_ja} ×{item.quantity}</span>
+            <select onChange={e=>{if(e.target.value)assignToBox(parseInt(e.target.value),idx);e.target.value=""}} defaultValue="" style={{padding:"2px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:10,fontFamily:"inherit"}}>
+              <option value="">→ BOX選択</option>
+              {boxes.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>;
+        })}
+      </div>}
+
+      {/* BOX cards */}
+      {boxes.map(box=>(
+        <div key={box.id} style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:T.bg}}>
+            <input value={box.name} onChange={e=>setBoxes(prev=>prev.map(b=>b.id===box.id?{...b,name:e.target.value}:b))} style={{border:"none",background:"transparent",fontSize:12,fontWeight:700,color:T.text,fontFamily:"inherit"}}/>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:10,color:T.muted}}>{box.itemIndices.length}件</span>
+              {boxes.length>1&&<button onClick={()=>removeBox(box.id)} style={{background:"none",border:"none",fontSize:12,cursor:"pointer",color:T.muted}}>✕</button>}
+            </div>
+          </div>
+          {box.itemIndices.length===0&&<div style={{padding:12,textAlign:"center",fontSize:10,color:T.muted}}>商品をここに割り当ててください</div>}
+          {box.itemIndices.map(idx=>{
+            const item=items[idx];if(!item)return null;
+            return <div key={idx} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderTop:`1px solid ${T.border}`,fontSize:11}}>
+              <span style={{color:T.muted,fontSize:10,minWidth:30}}>{item.jan}</span>
+              <span style={{flex:1,color:T.text}}>{item.name_en||item.name_ja}</span>
+              <span style={{color:T.sub,fontSize:10}}>×{item.quantity}</span>
+              {item.ingredients_en?<span style={{fontSize:8,color:T.green||"#22c55e",background:(T.green||"#22c55e")+"15",padding:"1px 5px",borderRadius:8}}>成分✓</span>:null}
+              <button onClick={()=>removeFromBox(box.id,idx)} style={{background:"none",border:"none",fontSize:10,cursor:"pointer",color:T.muted}}>✕</button>
+            </div>;
+          })}
+        </div>
+      ))}
+
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+        <button onClick={()=>setStep(4)} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ → 出力</button>
+      </div>
+    </div>
+  )}
+
+  {/* Step 4: Output */}
+  {step===4&&(
+    <div style={{background:T.card,borderRadius:12,padding:16,display:"flex",flexDirection:"column",gap:16}}>
+      <div style={{fontSize:12,fontWeight:700,color:T.sub,marginBottom:4}}>出力設定</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:6}}>言語</div>
+          <div style={{display:"flex",gap:6}}>
+            {[{id:"en",label:"English"},{id:"ja",label:"日本語"}].map(l=>(
+              <button key={l.id} onClick={()=>setOutputLang(l.id)} style={{flex:1,padding:"8px 12px",borderRadius:6,border:`1px solid ${outputLang===l.id?T.primary:T.border}`,background:outputLang===l.id?T.primary+"12":"transparent",color:outputLang===l.id?T.primary:T.muted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{l.label}</button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:6}}>形式</div>
+          <div style={{display:"flex",gap:6}}>
+            {[{id:"excel",label:"Excel"},{id:"pdf",label:"PDF"}].map(f=>(
+              <button key={f.id} onClick={()=>setOutputFormat(f.id)} style={{flex:1,padding:"8px 12px",borderRadius:6,border:`1px solid ${outputFormat===f.id?T.primary:T.border}`,background:outputFormat===f.id?T.primary+"12":"transparent",color:outputFormat===f.id?T.primary:T.muted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{f.label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Preview */}
+      <div style={{border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}}>
+        <div style={{padding:"8px 12px",background:T.bg,fontSize:11,fontWeight:700,color:T.sub}}>プレビュー</div>
+        {(boxes.filter(b=>b.itemIndices.length>0).length>0?boxes.filter(b=>b.itemIndices.length>0):[{id:0,name:"BOX 1",itemIndices:items.map((_,i)=>i)}]).map(box=>(
+          <div key={box.id} style={{padding:10,borderTop:`1px solid ${T.border}`}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.primary,marginBottom:6}}>{box.name} — {box.itemIndices.length}件</div>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+              <thead><tr style={{borderBottom:`1px solid ${T.border}`}}>
+                <th style={{textAlign:"left",padding:"4px 6px",color:T.muted,fontWeight:600}}>JAN</th>
+                <th style={{textAlign:"left",padding:"4px 6px",color:T.muted,fontWeight:600}}>{outputLang==="en"?"Product":"商品名"}</th>
+                <th style={{textAlign:"center",padding:"4px 6px",color:T.muted,fontWeight:600}}>{outputLang==="en"?"Qty":"数量"}</th>
+                <th style={{textAlign:"center",padding:"4px 6px",color:T.muted,fontWeight:600}}>{outputLang==="en"?"Ingredients":"成分"}</th>
+              </tr></thead>
+              <tbody>{box.itemIndices.map(idx=>{const it=items[idx];if(!it)return null;return(
+                <tr key={idx} style={{borderBottom:`1px solid ${T.border}22`}}>
+                  <td style={{padding:"4px 6px",color:T.muted}}>{it.jan}</td>
+                  <td style={{padding:"4px 6px",color:T.text}}>{outputLang==="en"?(it.name_en||it.name_ja):(it.name_ja||it.name_en)}</td>
+                  <td style={{padding:"4px 6px",textAlign:"center"}}>{it.quantity}</td>
+                  <td style={{padding:"4px 6px",textAlign:"center"}}>{it.ingredients_en?<span style={{color:T.green||"#22c55e"}}>✓</span>:<span style={{color:T.muted}}>—</span>}</td>
+                </tr>
+              )})}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+        <button onClick={generateDeliveryNote} disabled={generating} style={{flex:2,padding:12,background:generating?"#ccc":T.primary,color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:generating?"default":"pointer",fontFamily:"inherit"}}>
+          {generating?"生成中...":`${outputFormat==="excel"?"Excel":"PDF"}をダウンロード`}
+        </button>
+      </div>
+    </div>
+  )}
+</div>
+);
+}
+
+
 // ── Document List View (書類一覧) ──
 function DocumentListView({client,user,accounts,deals,onBack,onCreateInvoice}){
 const IS_MOBILE=window.innerWidth<768;
@@ -6138,20 +6679,13 @@ if(docPage==="doc_list"){
 return <DocumentListView client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")} onCreateInvoice={(doc)=>{setPrefillDoc(doc);setDocPage("invoice")}}/>;
 }
 
-// ── Delivery Note placeholder (Phase 3) ──
-return(
-<div style={{padding:16,background:T.bg,minHeight:"100%"}}>
-  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-    <button onClick={()=>window.history.back()} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
-    <h2 style={{fontSize:15,fontWeight:700,color:T.primary,margin:0}}>納品書作成</h2>
-  </div>
-  <div style={{padding:40,background:T.card,borderRadius:12,textAlign:"center"}}>
-    <div style={{fontSize:36,marginBottom:12}}>📦</div>
-    <div style={{fontSize:13,fontWeight:600,color:T.sub,marginBottom:6}}>Phase 3で実装予定</div>
-    <div style={{fontSize:11,color:T.muted}}>BOXグルーピング・成分表付き納品書の作成機能を追加します</div>
-  </div>
-</div>
-)}
+// ── Delivery Note → DeliveryNoteBuilder ──
+if(docPage==="delivery"){
+return <DeliveryNoteBuilder client={client} user={user} accounts={accounts} contacts={contacts} deals={deals} onBack={()=>setDocPage("menu")}/>;
+}
+
+return null;
+}
 
 // ── Todo Overview Page ──
 function TodoOverviewPage({deals,accounts,client,user,allUsers,onOpenDeal}){
