@@ -3976,13 +3976,14 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[saveErr,setSaveErr]=useState("");
   const searchTimer=useRef(null);
 
-  // Auto-generate doc number
+  // Auto-generate doc number (with company name)
   useEffect(()=>{
     const today=new Date();
     const yyyymmdd=today.getFullYear().toString()+(today.getMonth()+1).toString().padStart(2,"0")+today.getDate().toString().padStart(2,"0");
-    const suffix=mode==="quotation"?"Q":"";
-    setDocNumber(`${yyyymmdd}-${suffix}1`);
-  },[mode]);
+    const prefix=mode==="quotation"?"Q":"INV";
+    const company=selectedAccount?selectedAccount.name.replace(/[\s,./()（）株式会社有限会社合同会社Inc\.Ltd\.Corp\.LLC]/gi,"").slice(0,20):"";
+    setDocNumber(company?`${yyyymmdd}-${prefix}-${company}`:`${yyyymmdd}-${prefix}1`);
+  },[mode,selectedAccount]);
 
   // Filter contacts by selected account
   const filteredContacts=useMemo(()=>{
@@ -4615,26 +4616,22 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       const grandTotal=subtotal+shippingCost;
 
       const docData={
-        type:mode,
+        doc_type:mode,
         doc_number:docNumber,
-        doc_date:docDate,
-        due_date:mode==="invoice"?dueDate:dueDate,
         account_id:selectedAccount?.id||null,
         contact_id:selectedContact?.id||null,
         deal_id:selectedDeal?.id||null,
-        user_id:user?.id||null,
-        client_info:clientInfo,
+        created_by:user?.id||null,
+        client_info:{...clientInfo,doc_date:docDate,due_date:dueDate,shipping_country:shippingCountry,exchange_rate:currencyRate,shipping_breakdown:shippingBreakdown},
         items:docItems,
-        subtotal_usd:subtotal,
-        shipping_cost_usd:shippingCost,
-        shipping_breakdown:shippingBreakdown,
-        grand_total_usd:grandTotal,
-        incoterms:incoterm,
-        shipping_country:shippingCountry,
-        notes,
+        subtotal:subtotal,
+        shipping:shippingCost,
+        total:grandTotal,
+        incoterm:incoterm,
         currency:mode==="invoice"?currency:"USD",
-        exchange_rate:currencyRate,
-        created_at:new Date().toISOString()
+        carrier:carrier,
+        service:service,
+        notes,
       };
 
       const{error}=await client.from("generated_documents").insert([docData]);
