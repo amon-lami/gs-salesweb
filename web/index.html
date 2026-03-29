@@ -5650,6 +5650,145 @@ return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:I
 }
 
 
+// ── Document List View (書類一覧) ──
+function DocumentListView({client,user,accounts,deals,onBack}){
+const IS_MOBILE=window.innerWidth<768;
+const[docs,setDocs]=useState([]);
+const[loading,setLoading]=useState(true);
+const[filterType,setFilterType]=useState("all");
+const[searchText,setSearchText]=useState("");
+const[syncing,setSyncing]=useState({});
+
+useEffect(()=>{loadDocs()},[]);
+const loadDocs=async()=>{
+  setLoading(true);
+  const{data,error}=await client.from("generated_documents").select("*").order("created_at",{ascending:false}).limit(500);
+  if(!error&&data)setDocs(data);
+  setLoading(false);
+};
+
+const accountMap=useMemo(()=>{
+  const m={};(accounts||[]).forEach(a=>m[a.id]=a.name);return m;
+},[accounts]);
+const dealMap=useMemo(()=>{
+  const m={};(deals||[]).forEach(d=>m[d.id]=d);return m;
+},[deals]);
+
+const filtered=useMemo(()=>{
+  let list=docs;
+  if(filterType!=="all")list=list.filter(d=>d.doc_type===filterType);
+  if(searchText){const q=searchText.toLowerCase();list=list.filter(d=>{
+    const acctName=d.account_id?accountMap[d.account_id]||"":"";
+    const dealName=d.deal_id?dealMap[d.deal_id]?.name||"":"";
+    return (d.doc_number||"").toLowerCase().includes(q)||acctName.toLowerCase().includes(q)||dealName.toLowerCase().includes(q)||(d.client_info?.companyName||"").toLowerCase().includes(q);
+  })}
+  return list;
+},[docs,filterType,searchText,accountMap,dealMap]);
+
+const syncToOrders=async(doc)=>{
+  if(!doc.deal_id){alert("この書類は案件にリンクされていないため、発注に反映できません。");return}
+  if(!doc.items||doc.items.length===0){alert("この書類には商品がありません。");return}
+  setSyncing(p=>({...p,[doc.id]:true}));
+  try{
+    // Check existing order items for this document
+    const{data:existing}=await client.from("order_items").select("id").eq("document_id",doc.id);
+    if(existing&&existing.length>0){
+      if(!confirm(`この書類から既に${existing.length}件の発注アイテムが作成されています。追加で作成しますか？`))return setSyncing(p=>({...p,[doc.id]:false}));
+    }
+    const deal=dealMap[doc.deal_id];
+    const orderItems=doc.items.map(item=>({
+      deal_id:doc.deal_id,
+      document_id:doc.id,
+      account_id:doc.account_id||deal?.account_id||null,
+      product_id:item.product_id||null,
+      jan:item.jan||null,
+      name_en:item.name_en||"",
+      name_ja:item.name_ja||"",
+      quantity:item.quantity||0,
+      case_quantity:item.case_quantity||null,
+      cost_price:item.cost_price||null,
+      selling_price:item.selling_price||null,
+      weight_g:item.weight_g||null,
+      supplier:item.supplier||null,
+      status:"ordered",
+      created_by:user?.id||null,
+    }));
+    const{error}=await client.from("order_items").insert(orderItems);
+    if(error)throw error;
+    alert(`${orderItems.length}件の発注アイテムを作成しました。`);
+  }catch(err){alert("発注反映エラー: "+err.message)}
+  finally{setSyncing(p=>({...p,[doc.id]:false}))}
+};
+
+const typeLabel=(t)=>t==="quotation"?"見積書":t==="invoice"?"請求書":t==="delivery"?"納品書":t;
+const typeColor=(t)=>t==="quotation"?T.primary:t==="invoice"?T.accent:T.blue||"#3b82f6";
+
+if(loading)return <div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>読み込み中...</div>;
+
+return(
+<div style={{padding:IS_MOBILE?10:16,background:T.bg,minHeight:"100%"}}>
+  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+    <button onClick={onBack} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
+    <h2 style={{fontSize:15,fontWeight:700,color:T.primary,margin:0}}>書類一覧</h2>
+    <span style={{fontSize:11,color:T.muted}}>{filtered.length}件</span>
+  </div>
+
+  {/* Filters */}
+  <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+    {["all","quotation","invoice","delivery"].map(t=>(
+      <button key={t} onClick={()=>setFilterType(t)} style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${filterType===t?(t==="all"?T.primary:typeColor(t)):T.border}`,background:filterType===t?(t==="all"?T.primary:typeColor(t))+"15":"transparent",color:filterType===t?(t==="all"?T.primary:typeColor(t)):T.muted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{t==="all"?"すべて":typeLabel(t)}</button>
+    ))}
+    <input value={searchText} onChange={e=>setSearchText(e.target.value)} placeholder="書類番号・取引先・案件で検索..." style={{marginLeft:"auto",padding:"6px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",width:IS_MOBILE?"100%":220}}/>
+  </div>
+
+  {/* Document Cards */}
+  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+    {filtered.length===0&&<div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>書類がありません</div>}
+    {filtered.map(doc=>{
+      const dealObj=doc.deal_id?dealMap[doc.deal_id]:null;
+      const acctName=doc.account_id?accountMap[doc.account_id]:doc.client_info?.companyName||"—";
+      const itemCount=doc.items?.length||0;
+      const isSyncing=syncing[doc.id];
+      return(
+      <div key={doc.id} style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:10,padding:IS_MOBILE?"10px":"12px 16px",display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+        {/* Type badge */}
+        <div style={{minWidth:60,textAlign:"center"}}>
+          <span style={{display:"inline-block",padding:"3px 10px",borderRadius:12,background:typeColor(doc.doc_type)+"18",color:typeColor(doc.doc_type),fontSize:10,fontWeight:700}}>{typeLabel(doc.doc_type)}</span>
+        </div>
+        {/* Main info */}
+        <div style={{flex:1,minWidth:150}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.text}}>{doc.doc_number||"番号なし"}</div>
+          <div style={{fontSize:11,color:T.sub,marginTop:2}}>{acctName}</div>
+          {dealObj&&<div style={{fontSize:10,color:T.primary,marginTop:1}}>案件: {dealObj.name}</div>}
+        </div>
+        {/* Details */}
+        <div style={{display:"flex",gap:16,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:9,color:T.muted}}>商品数</div>
+            <div style={{fontSize:12,fontWeight:700,color:T.text}}>{itemCount}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:9,color:T.muted}}>合計</div>
+            <div style={{fontSize:12,fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</div>
+          </div>
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:9,color:T.muted}}>作成日</div>
+            <div style={{fontSize:11,color:T.sub}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</div>
+          </div>
+        </div>
+        {/* Sync button */}
+        <button onClick={()=>syncToOrders(doc)} disabled={isSyncing} style={{padding:"6px 14px",borderRadius:8,border:"none",background:doc.deal_id?(T.green||"#22c55e"):T.border,color:doc.deal_id?"#fff":T.muted,fontSize:11,fontWeight:700,cursor:doc.deal_id?"pointer":"not-allowed",opacity:isSyncing?.5:1,whiteSpace:"nowrap",fontFamily:"inherit"}}>
+          {isSyncing?"反映中...":"発注に反映"}
+        </button>
+      </div>
+      );
+    })}
+  </div>
+</div>
+);
+}
+
+
 // ── Documents Page ──
 function DocumentsPage({client,user,allUsers,accounts,contacts,deals}){
 const IS_MOBILE=window.innerWidth<768;
@@ -5786,12 +5925,14 @@ const sn=(uid)=>{const u=(allUsers||[]).find(x=>x.id===uid);return u?u.display_n
 // ── Menu ──
 if(docPage==="menu"){return(
 <div style={{padding:16,background:T.bg,minHeight:"100%"}}>
-  <h2 style={{fontSize:16,fontWeight:700,color:T.primary,margin:"0 0 20px"}}>書類作成</h2>
-  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+  <h2 style={{fontSize:16,fontWeight:700,color:T.primary,margin:"0 0 20px"}}>書類</h2>
+  <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr 1fr":"1fr 1fr 1fr",gap:12}}>
     {[{id:"quotation",label:"見積書作成",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke={T.primary} strokeWidth="1.5"/><path d="M8 7h8M8 11h8M8 15h5" stroke={T.primary} strokeWidth="1.3" strokeLinecap="round"/><circle cx="17" cy="17" r="4" fill={T.primary}/><text x="17" y="19" textAnchor="middle" fill="#fff" fontSize="7" fontWeight="700">¥</text></svg>,color:T.primary},
       {id:"invoice",label:"請求書作成",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="4" y="2" width="16" height="20" rx="2" stroke={T.accent} strokeWidth="1.5"/><path d="M8 7h8M8 11h8M8 15h5" stroke={T.accent} strokeWidth="1.3" strokeLinecap="round"/><circle cx="17" cy="17" r="4" fill={T.accent}/><text x="17" y="19" textAnchor="middle" fill="#fff" fontSize="7" fontWeight="700">$</text></svg>,color:T.accent},
       {id:"delivery",label:"納品書作成",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 8l4-4h10l4 4v10a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" stroke={T.blue||"#3b82f6"} strokeWidth="1.5"/><path d="M3 8h18M12 8v12" stroke={T.blue||"#3b82f6"} strokeWidth="1.3"/></svg>,color:T.blue||"#3b82f6"},
-      {id:"master",label:"マスタ編集",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke={T.sub} strokeWidth="1.5"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke={T.sub} strokeWidth="1.5" strokeLinecap="round"/></svg>,color:T.sub}
+      {id:"master",label:"マスタ編集",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke={T.sub} strokeWidth="1.5"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" stroke={T.sub} strokeWidth="1.5" strokeLinecap="round"/></svg>,color:T.sub},
+      {id:"doc_list",label:"書類一覧",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke={T.green||"#22c55e"} strokeWidth="1.5"/><path d="M7 8h10M7 12h10M7 16h6" stroke={T.green||"#22c55e"} strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.green||"#22c55e"},
+      {id:"orders",label:"発注管理",icon:<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 7h18v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" stroke={T.accent||"#f59e0b"} strokeWidth="1.5"/><path d="M3 7l3-3h12l3 3" stroke={T.accent||"#f59e0b"} strokeWidth="1.3"/><path d="M9 11h6" stroke={T.accent||"#f59e0b"} strokeWidth="1.3" strokeLinecap="round"/></svg>,color:T.accent||"#f59e0b"}
     ].map(b=>(
       <button key={b.id} onClick={()=>setDocPage(b.id)} style={{padding:20,borderRadius:12,background:T.card,border:`2px solid ${b.color}22`,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:110,gap:10,fontFamily:"inherit",transition:"all .15s"}}
         onMouseEnter={e=>{e.currentTarget.style.borderColor=b.color;e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)"}}
@@ -5954,6 +6095,21 @@ if(docPage==="master"){return(
 // ── Quotation & Invoice → QuotationInvoiceBuilder ──
 if(docPage==="quotation"||docPage==="invoice"){
 return <QuotationInvoiceBuilder mode={docPage} client={client} user={user} accounts={accounts} contacts={contacts} deals={deals} onBack={()=>setDocPage("menu")}/>;
+}
+
+// ── Order Management (embedded in documents) ──
+if(docPage==="orders"){
+return <div style={{position:"relative"}}>
+  <div style={{position:"sticky",top:0,zIndex:10,background:T.bg,padding:"8px 16px 0",display:"flex",alignItems:"center",gap:10}}>
+    <button onClick={()=>setDocPage("menu")} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
+  </div>
+  <OrderManagementPage client={client} user={user} accounts={accounts} deals={deals}/>
+</div>;
+}
+
+// ── Document List (書類一覧) ──
+if(docPage==="doc_list"){
+return <DocumentListView client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")}/>;
 }
 
 // ── Delivery Note placeholder (Phase 3) ──
@@ -7708,7 +7864,6 @@ function App(){
               {id:"todos",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,label:"ToDo",badge:todoUnread},
               {id:"expenses",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12M6 6v8M10 6v8" strokeWidth="1.1" stroke="currentColor"/></svg>,label:"経費"},
               {id:"documents",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3"/><path d="M10 2v3h3" stroke="currentColor" strokeWidth="1.2"/><path d="M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>,label:"書類"},
-              {id:"orders",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke="currentColor" strokeWidth="1.3"/><path d="M2 4l2-2h8l2 2" stroke="currentColor" strokeWidth="1.2"/><path d="M6 7h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,label:"発注管理"},
               {id:"chat",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3V3z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,label:"チャット",badge:chatUnread}
             ].map(nav=>(<button key={nav.id} onClick={()=>{navigatePage(nav.id);if(nav.id==="chat")setChatUnread(0)}} style={{width:44,padding:"6px 0",borderRadius:6,border:"none",background:page===nav.id?T.primary:"transparent",color:page===nav.id?"#fff":T.muted,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,fontSize:8.5,fontWeight:600,fontFamily:"inherit",position:"relative"}}
               onMouseEnter={e=>{if(page!==nav.id)e.currentTarget.style.background=T.hover}} onMouseLeave={e=>{if(page!==nav.id)e.currentTarget.style.background="transparent"}}>
@@ -7737,7 +7892,6 @@ function App(){
           {page==="todos"&&<TodoOverviewPage deals={deals} accounts={accounts} client={client} user={user} allUsers={allUsers} onOpenDeal={d=>openDealDetail(d)}/>}
           {page==="documents"&&<DocumentsPage client={client} user={user} allUsers={allUsers} accounts={accounts} contacts={contacts} deals={deals}/>}
 
-          {page==="orders"&&<OrderManagementPage client={client} user={user} accounts={accounts} deals={deals}/>}
 
           {page==="deals"&&(<>
             {/* Toolbar — unified filter bar */}
