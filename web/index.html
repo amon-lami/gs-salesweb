@@ -4044,6 +4044,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[step,_setStep]=useState(1);
   const[saving,setSaving]=useState(false);
   const[saveErr,setSaveErr]=useState("");
+  const[editingMargin,setEditingMargin]=useState(null); // {idx,value} when user is typing in margin input
 
   const pricesInitialized=useRef(false);
   // Browser back support: push history on step change, pop to go back
@@ -4681,10 +4682,11 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     docItems.forEach(item=>{
       const amount=item.selling_price*item.quantity;
       sub+=amount;
-      const costUsd=(item.cost_price||0)/jpy_rate;
+      const costTaxIncl=Math.round((item.cost_price||0)*1.1);
+      const costUsd=costTaxIncl/jpy_rate;
       const itemProfit=(item.selling_price-costUsd)*item.quantity;
       profit+=itemProfit;
-      costJpy+=(item.cost_price||0)*item.quantity;
+      costJpy+=costTaxIncl*item.quantity;
       weight+=(item.weight_g||0)*item.quantity;
     });
 
@@ -5467,10 +5469,10 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
               <tbody>
                 {docItems.map((item,i)=>{
                   const amt=item.selling_price*item.quantity;
-                  const costUsd=(item.cost_price||0)/jpy_rate;
+                  const costTaxIncl=Math.round((item.cost_price||0)*1.1);
+                  const costUsd=costTaxIncl/jpy_rate;
                   const profit=(item.selling_price-costUsd)*item.quantity;
                   const margin=amt>0?(profit/amt)*100:0;
-                  const costTaxIncl=Math.round((item.cost_price||0)*1.1);
                   const priceJpy=Math.round(item.selling_price*jpy_rate);
                   const salesTotal=Math.round(item.selling_price*item.quantity*jpy_rate);
                   const profitJpy=Math.round(profit*jpy_rate);
@@ -5486,7 +5488,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.sub}}>{item.weight_g||0}</td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.sub}}>{item.price_break_qty>0?item.price_break_qty:"-"}</td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.text}}>¥{costTaxIncl.toLocaleString()}</td>
-                      <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={parseFloat(margin.toFixed(1))} onChange={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v<100)updateMargin(i,v)}} step="0.1" style={{width:52,padding:"4px",border:`1px solid ${marginColor}40`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:marginColor+"08",color:marginColor,fontWeight:700}}/></td>
+                      <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={editingMargin&&editingMargin.idx===i?editingMargin.value:parseFloat(margin.toFixed(1))} onFocus={()=>setEditingMargin({idx:i,value:parseFloat(margin.toFixed(1))})} onChange={e=>setEditingMargin({idx:i,value:e.target.value})} onBlur={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v>0&&v<100)updateMargin(i,v);setEditingMargin(null)}} onKeyDown={e=>{if(e.key==="Enter"){e.target.blur()}}} step="0.1" style={{width:52,padding:"4px",border:`1px solid ${marginColor}40`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:marginColor+"08",color:marginColor,fontWeight:700}}/></td>
                       <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",e.target.value)} min="1" style={{width:48,padding:"4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:T.bg}}/></td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.text}}>¥{priceJpy.toLocaleString()}</td>
                       <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",e.target.value)} step="0.01" style={{width:64,padding:"4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:T.bg}}/></td>
