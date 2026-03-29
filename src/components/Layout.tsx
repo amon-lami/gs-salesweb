@@ -7,12 +7,13 @@
 import React, { memo, useState, useEffect } from 'react';
 import { T, IS_MOBILE } from '@/lib/constants';
 
-export type Page = 'home' | 'deals' | 'accounts' | 'contacts' | 'leads' | 'reports' | 'settings' | 'todos' | 'expenses' | 'documents';
+export type Page = 'home' | 'deals' | 'accounts' | 'contacts' | 'leads' | 'reports' | 'settings' | 'todos' | 'expenses' | 'documents' | 'chat';
 
 interface LayoutProps {
   page: Page;
   onPageChange: (page: Page) => void;
   userName?: string;
+  chatUnread?: number;
   children: React.ReactNode;
 }
 
@@ -46,11 +47,14 @@ const NAV_ITEMS: { id: Page; icon: React.ReactNode; label: string }[] = [
   { id: 'documents', icon: (
     <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M4 1h6l4 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V2a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3"/><path d="M10 1v4h4" stroke="currentColor" strokeWidth="1.2"/></svg>
   ), label: '書類' },
+  { id: 'chat', icon: (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3V3z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  ), label: 'チャット' },
 ];
 
-const MOBILE_NAV: Page[] = ['home', 'deals', 'todos', 'documents', 'settings'];
+const MOBILE_NAV: Page[] = ['home', 'deals', 'chat', 'expenses', 'settings'];
 
-export const Layout = memo(function Layout({ page, onPageChange, userName, children }: LayoutProps) {
+export const Layout = memo(function Layout({ page, onPageChange, userName, chatUnread, children }: LayoutProps) {
   const [isMobile, setIsMobile] = useState(IS_MOBILE);
 
   useEffect(() => {
@@ -89,8 +93,15 @@ export const Layout = memo(function Layout({ page, onPageChange, userName, child
               : NAV_ITEMS.find(n => n.id === navId)!;
             return (
               <button key={nav.id} onClick={() => onPageChange(nav.id)}
-                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', border: 'none', background: 'transparent', cursor: 'pointer', color: page === nav.id ? T.primary : T.muted, fontSize: 9, fontWeight: 600, fontFamily: 'inherit' }}>
-                {nav.icon}
+                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', border: 'none', background: 'transparent', cursor: 'pointer', color: page === nav.id ? T.primary : T.muted, fontSize: 9, fontWeight: 600, fontFamily: 'inherit', position: 'relative' }}>
+                <div style={{ position: 'relative' }}>
+                  {nav.icon}
+                  {nav.id === 'chat' && (chatUnread || 0) > 0 && (
+                    <span style={{ position: 'absolute', top: -4, right: -8, minWidth: 14, height: 14, borderRadius: 7, background: T.red, color: '#fff', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+                      {(chatUnread || 0) > 99 ? '99+' : chatUnread}
+                    </span>
+                  )}
+                </div>
                 <span>{nav.label}</span>
               </button>
             );
@@ -160,7 +171,14 @@ export const Layout = memo(function Layout({ page, onPageChange, userName, child
                   transition: 'all 0.15s',
                 }}
               >
-                {nav.icon}
+                <div style={{ position: 'relative' }}>
+                  {nav.icon}
+                  {nav.id === 'chat' && (chatUnread || 0) > 0 && (
+                    <span style={{ position: 'absolute', top: -4, right: -6, minWidth: 14, height: 14, borderRadius: 7, background: T.red, color: '#fff', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px', lineHeight: 1 }}>
+                      {(chatUnread || 0) > 99 ? '99+' : chatUnread}
+                    </span>
+                  )}
+                </div>
                 <span>{nav.label}</span>
               </button>
             ))}

@@ -44,3 +44,4 @@ export { QuotationInvoiceBuilder } from './documents/QuotationInvoiceBuilder';
 
 // Phase 5: Chat
 export { ChatPanel } from './chat/ChatPanel';
+export { ChatPage } from './chat/ChatPage';

@@ -11,6 +11,7 @@ import {
   Layout, LeadPage, DealPage, Dashboard, AccountPage, ContactPage,
   ErrorBoundary, ToastProvider, LoginScreen,
   WeeklyReportPage, TodoOverviewPage, ExpensePage, DocumentsPage,
+  ChatPage,
   SettingsManager, BusinessManager, CSVImporter,
 } from '@/components';
 import type { Page } from '@/components';
@@ -191,6 +192,17 @@ export default function App() {
           allUsers={allUsers}
           accounts={accounts}
           contacts={contacts}
+          deals={deals}
+        />
+      )}
+
+      {page === 'chat' && user && (
+        <ChatPage
+          client={client}
+          user={user}
+          allUsers={allUsers}
+          accounts={accounts}
+          categories={categories}
           deals={deals}
         />
       )}

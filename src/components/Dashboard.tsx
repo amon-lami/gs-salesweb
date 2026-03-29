@@ -3,10 +3,11 @@
 // ライトテーマ（index版準拠）
 // ============================================
 
-import { useState, useEffect, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Deal, Account, Contact, Lead, AppUser } from '@/types/database';
 import { STAGES, REV_STAGES, FY_TARGET, fmtYen, countryToFlag, shortName, initial, T } from '@/lib/constants';
+import { useToast } from '@/components/shared/ToastProvider';
 
 interface DashboardProps {
   deals: Deal[];
@@ -23,12 +24,192 @@ interface UnreportedEntry {
   deals: Deal[];
 }
 
+interface HitokotoParsed {
+  text: string;
+  updated_at: string | null;
+}
+
+interface HitokotoEntry {
+  uid: string;
+  name: string;
+  initial: string;
+  msg: string;
+}
+
+interface ActivityRow {
+  id: string;
+  type: string;
+  content: string | null;
+  user_id: string | null;
+  account_id: string | null;
+  deal_id: string | null;
+  lead_id: string | null;
+  created_at: string;
+  deleted_at: string | null;
+  is_todo: boolean | null;
+}
+
 export const Dashboard = memo(function Dashboard({
   deals, accounts, contacts: _contacts, leads: _leads, allUsers, client, user,
 }: DashboardProps) {
   void _contacts; void _leads;
+  const toast = useToast();
   const [unreported, setUnreported] = useState<UnreportedEntry[]>([]);
   const [animPct, setAnimPct] = useState(0);
+
+  // ── アクティビティフィード ──
+  const [recentActivities, setRecentActivities] = useState<ActivityRow[]>([]);
+  useEffect(() => {
+    if (!client) return;
+    (async () => {
+      const { data } = await client
+        .from('sales_activities')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (data) setRecentActivities((data as ActivityRow[]).filter(a => !a.deleted_at && !a.is_todo));
+    })();
+  }, [client, deals]);
+
+  // ── ひとこと（Hitokoto）システム ──
+  // company_settings の hitokoto_<uid> キーで個別保存（JSON: {text, updated_at}）
+  // 毎朝6時(JST)にリセット
+  const [companySettings, setCompanySettings] = useState<Record<string, string | null>>({});
+  const [hitokotoEdit, setHitokotoEdit] = useState(false);
+  const [hitokotoDraft, setHitokotoDraft] = useState('');
+  const [hitokotoSaving, setHitokotoSaving] = useState(false);
+  const _hitokotoResetDone = useRef(false);
+  const _hitokotoLoaded = useRef(false);
+
+  const _today6am = useMemo(() => {
+    const n = new Date();
+    const jstOff = 9 * 60 * 60 * 1000;
+    const jstNow = new Date(n.getTime() + jstOff);
+    const jst6am = new Date(
+      Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate(), 6, 0, 0) - jstOff,
+    );
+    if (n < jst6am) jst6am.setTime(jst6am.getTime() - 86400000);
+    return jst6am;
+  }, []);
+
+  const _parseHitokoto = useCallback((v: string | null | undefined): HitokotoParsed | null => {
+    if (!v) return null;
+    try {
+      const j = JSON.parse(v);
+      if (j && j.text) return j as HitokotoParsed;
+    } catch { /* ignore */ }
+    return { text: String(v), updated_at: null };
+  }, []);
+
+  // Load hitokoto entries from company_settings
+  useEffect(() => {
+    if (!client || _hitokotoLoaded.current) return;
+    _hitokotoLoaded.current = true;
+    (async () => {
+      const { data } = await client
+        .from('company_settings')
+        .select('key, value')
+        .like('key', 'hitokoto_%');
+      if (data) {
+        const map: Record<string, string | null> = {};
+        (data as { key: string; value: string | null }[]).forEach(r => { map[r.key] = r.value; });
+        setCompanySettings(map);
+      }
+    })();
+  }, [client]);
+
+  // Auto-archive & reset stale hitokoto on mount
+  useEffect(() => {
+    if (!client || Object.keys(companySettings).length === 0 || _hitokotoResetDone.current) return;
+    _hitokotoResetDone.current = true;
+    (async () => {
+      const keys = Object.entries(companySettings).filter(([k, v]) => k.startsWith('hitokoto_') && v);
+      for (const [k, v] of keys) {
+        const parsed = _parseHitokoto(v);
+        if (!parsed || !parsed.text) continue;
+        const updAt = parsed.updated_at ? new Date(parsed.updated_at) : null;
+        if (!updAt || updAt < _today6am) {
+          const uid = k.replace('hitokoto_', '');
+          try {
+            await client.from('hitokoto_history').insert({
+              user_id: uid,
+              message: parsed.text,
+              posted_at: parsed.updated_at || new Date().toISOString(),
+            });
+          } catch (e) { console.warn('hitokoto archive:', e); }
+          try {
+            const { data: existing } = await client.from('company_settings').select('id').eq('key', k).limit(1);
+            if (existing && existing.length > 0) {
+              await client.from('company_settings').update({ value: null, updated_at: new Date().toISOString() }).eq('id', (existing[0] as { id: string }).id);
+            }
+          } catch (e) { console.warn('hitokoto reset:', e); }
+          setCompanySettings(prev => { const next = { ...prev }; delete next[k]; return next; });
+        }
+      }
+    })();
+  }, [client, companySettings, _parseHitokoto, _today6am]);
+
+  const hitokotoEntries = useMemo<HitokotoEntry[]>(() => {
+    return Object.entries(companySettings)
+      .filter(([k, v]) => k.startsWith('hitokoto_') && v)
+      .map(([k, v]) => {
+        const uid = k.replace('hitokoto_', '');
+        const u = allUsers.find(x => x.id === uid);
+        const parsed = _parseHitokoto(v);
+        const name = shortName(u);
+        return { uid, name, initial: (name || '?')[0].toUpperCase(), msg: parsed?.text || '' };
+      })
+      .filter(e => e.msg);
+  }, [companySettings, allUsers, _parseHitokoto]);
+
+  const myHitokoto = useMemo(() => {
+    const p = _parseHitokoto(companySettings?.['hitokoto_' + user?.id]);
+    return p?.text || '';
+  }, [companySettings, user?.id, _parseHitokoto]);
+
+  const saveHitokoto = useCallback(async () => {
+    if (!client || !user?.id) return;
+    setHitokotoSaving(true);
+    try {
+      const val = hitokotoDraft.trim();
+      const myKey = 'hitokoto_' + user.id;
+      const jsonVal = val ? JSON.stringify({ text: val, updated_at: new Date().toISOString() }) : null;
+      // Archive old hitokoto before overwriting
+      const oldParsed = _parseHitokoto(companySettings?.[myKey]);
+      if (oldParsed && oldParsed.text) {
+        try {
+          await client.from('hitokoto_history').insert({
+            user_id: user.id,
+            message: oldParsed.text,
+            posted_at: oldParsed.updated_at || new Date().toISOString(),
+          });
+        } catch (e) { console.warn('hitokoto archive:', e); }
+      }
+      // Check if row exists
+      const { data: existing } = await client.from('company_settings').select('id').eq('key', myKey).limit(1);
+      if (existing && existing.length > 0) {
+        if (jsonVal) {
+          await client.from('company_settings').update({ value: jsonVal }).eq('id', (existing[0] as { id: string }).id);
+        } else {
+          await client.from('company_settings').update({ value: null, updated_at: new Date().toISOString() }).eq('id', (existing[0] as { id: string }).id);
+        }
+      } else if (jsonVal) {
+        await client.from('company_settings').insert({ key: myKey, value: jsonVal });
+      }
+      // Update local state
+      setCompanySettings(prev => {
+        const next = { ...prev };
+        if (jsonVal) next[myKey] = jsonVal; else delete next[myKey];
+        return next;
+      });
+      toast('ひとことを保存しました');
+    } catch (e) {
+      console.error('saveHitokoto error:', e);
+      toast('保存に失敗しました', 'error');
+    }
+    setHitokotoEdit(false);
+    setHitokotoSaving(false);
+  }, [client, user?.id, hitokotoDraft, companySettings, _parseHitokoto, toast]);
 
   const now = useMemo(() => new Date(), []);
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -261,6 +442,56 @@ export const Dashboard = memo(function Dashboard({
         <div style={{ fontSize: 11, color: T.muted, fontWeight: 500 }}>{greet}</div>
         <div style={{ fontSize: 17, fontWeight: 800, color: T.primary, letterSpacing: '-0.02em', marginTop: 2 }}>{userName}</div>
       </div>
+
+      {/* ━━ HITOKOTO: みんなのひとこと ━━ */}
+      {(hitokotoEntries.length > 0 || hitokotoEdit) && (
+        <div style={{ padding: '0 24px', marginTop: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {hitokotoEntries.map(({ uid, name: eName, initial: eInit, msg }) => (
+              <div key={uid} style={{ background: T.card, borderRadius: 10, padding: '14px 18px', border: `1px solid ${T.border}`, position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 26, height: 26, borderRadius: 13, background: T.accent, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>{eInit}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: T.primary }}>{eName}のひとこと</div>
+                  {uid === user?.id && !hitokotoEdit && (
+                    <button
+                      onClick={() => { setHitokotoDraft(msg); setHitokotoEdit(true); }}
+                      style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: 4, border: `1px solid ${T.border}`, background: 'transparent', color: T.muted, fontSize: 9, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                    >
+                      編集
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 500, color: T.primary, lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{msg}</div>
+              </div>
+            ))}
+            {hitokotoEdit && (
+              <div style={{ background: T.card, borderRadius: 10, padding: '14px 18px', border: `1px solid ${T.accent}` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.primary, marginBottom: 8 }}>{shortName(allUsers.find(u => u.id === user?.id))}のひとこと</div>
+                <textarea
+                  value={hitokotoDraft}
+                  onChange={e => setHitokotoDraft(e.target.value)}
+                  placeholder="チームへひとことを入力..."
+                  style={{ width: '100%', padding: '8px 10px', border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 13, fontWeight: 500, fontFamily: 'inherit', outline: 'none', background: T.bg, color: T.primary, resize: 'vertical', minHeight: 40, lineHeight: 1.6, boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setHitokotoEdit(false)} style={{ padding: '4px 12px', borderRadius: 5, border: `1px solid ${T.border}`, background: 'transparent', color: T.muted, fontSize: 10, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>キャンセル</button>
+                  <button onClick={saveHitokoto} disabled={hitokotoSaving} style={{ padding: '4px 12px', borderRadius: 5, border: 'none', background: T.primary, color: '#fff', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: hitokotoSaving ? 0.5 : 1 }}>{hitokotoSaving ? '保存中...' : '保存'}</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {!myHitokoto && !hitokotoEdit && (
+        <div style={{ padding: '0 24px', marginTop: hitokotoEntries.length > 0 ? 10 : 16 }}>
+          <button
+            onClick={() => { setHitokotoDraft(''); setHitokotoEdit(true); }}
+            style={{ width: '100%', padding: '12px', borderRadius: 10, border: `2px dashed ${T.border}`, background: 'transparent', color: T.muted, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            + ひとことを追加
+          </button>
+        </div>
+      )}
 
       <div style={{ padding: '16px 24px' }}>
 
@@ -527,6 +758,60 @@ export const Dashboard = memo(function Dashboard({
             </div>
           ))}
         </div>
+
+        {/* ━━ SECTION H: 最近のアクティビティ ━━ */}
+        {recentActivities.length > 0 && (
+          <div style={{ background: T.card, borderRadius: 10, padding: '16px 20px', marginBottom: 16, border: `1px solid ${T.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ width: 6, height: 6, borderRadius: 3, background: T.accent }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: T.primary }}>最近のアクティビティ</span>
+              </div>
+            </div>
+            <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+              {recentActivities.slice(0, 10).map(a => {
+                const actUser = allUsers.find(x => x.id === a.user_id);
+                const acct = accounts.find(x => x.id === a.account_id);
+                const d = new Date(a.created_at);
+                const timeStr = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                const typeLabels: Record<string, string> = {
+                  stage_change: 'ステージ変更', note: 'メモ', call: '電話', email: 'メール',
+                  meeting: 'ミーティング', weekly_report: '週報', file: 'ファイル',
+                  audit_update: '更新', audit_insert: '新規作成', report: 'レポート',
+                  todo: 'ToDo', action: 'アクション',
+                };
+                const typeLabel = typeLabels[a.type] || a.type;
+                const typeIcons: Record<string, string> = {
+                  stage_change: '🔄', note: '📝', call: '📞', email: '✉️',
+                  meeting: '🤝', weekly_report: '📊', file: '📎',
+                  audit_update: '✏️', audit_insert: '✨', report: '📋',
+                  todo: '☑️', action: '⚡',
+                };
+                const typeIcon = typeIcons[a.type] || '📌';
+                return (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '6px 0', borderBottom: `1px solid ${T.borderLight}` }}>
+                    <div style={{ width: 24, height: 24, borderRadius: 12, background: T.borderLight, color: T.sub, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>
+                      {typeIcon}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: T.primary }}>
+                        <span style={{ fontWeight: 600 }}>{shortName(actUser)}</span>
+                        <span style={{ color: T.muted, marginLeft: 4 }}>{typeLabel}</span>
+                        {acct && <span style={{ color: T.accent, marginLeft: 4, fontWeight: 500 }}>{acct.name}</span>}
+                      </div>
+                      {a.content && (
+                        <div style={{ fontSize: 10, color: T.sub, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {a.content}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 9, color: T.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{timeStr}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       </div>
     </div>
