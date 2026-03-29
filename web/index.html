@@ -4045,8 +4045,21 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[saving,setSaving]=useState(false);
   const[saveErr,setSaveErr]=useState("");
 
+  const pricesInitialized=useRef(false);
   // Browser back support: push history on step change, pop to go back
   const setStep=(newStep)=>{
+    // Auto-calc prices at 25% margin when first entering summary step
+    const summaryStep=mode==="invoice"?5:4;
+    if(newStep===summaryStep&&!pricesInitialized.current){
+      pricesInitialized.current=true;
+      setDocItems(prev=>prev.map(item=>{
+        if(item.selling_price>0)return item; // keep if already set
+        const costTaxIncl=Math.round((item.cost_price||0)*1.1);
+        const costUsd=costTaxIncl/jpy_rate;
+        const sp=costUsd>0?parseFloat((costUsd/(1-25/100)).toFixed(2)):0;
+        return{...item,selling_price:sp};
+      }));
+    }
     _setStep(newStep);
     window.history.pushState({_gs:true,view:"docBuilder",mode,step:newStep},"");
   };
@@ -4637,6 +4650,29 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     setDocItems(prev=>prev.filter((_,i)=>i!==idx));
   };
 
+  // Auto-calculate selling_price at target margin (default 25%)
+  const autoCalcPrices=(targetMargin=25)=>{
+    setDocItems(prev=>prev.map(item=>{
+      const costTaxIncl=Math.round((item.cost_price||0)*1.1);
+      const costUsd=costTaxIncl/jpy_rate;
+      const sp=costUsd>0?parseFloat((costUsd/(1-targetMargin/100)).toFixed(2)):item.selling_price;
+      return{...item,selling_price:sp};
+    }));
+  };
+
+  // Update selling_price from margin input
+  const updateMargin=(idx,newMarginPct)=>{
+    setDocItems(prev=>{
+      const newItems=[...prev];
+      const item=newItems[idx];
+      const costTaxIncl=Math.round((item.cost_price||0)*1.1);
+      const costUsd=costTaxIncl/jpy_rate;
+      const sp=costUsd>0?parseFloat((costUsd/(1-newMarginPct/100)).toFixed(2)):0;
+      newItems[idx]={...item,selling_price:sp};
+      return newItems;
+    });
+  };
+
   // Calculate totals
   const{subtotal,totalCostJpy,totalProfit,overallMarginPct,totalWeight}=useMemo(()=>{
     let sub=0,costJpy=0,profit=0;
@@ -5214,38 +5250,33 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
                 <thead>
                   <tr style={{background:T.borderLight,borderBottom:`1px solid ${T.border}`}}>
-                    <th style={{padding:8,textAlign:"left",fontWeight:700,color:T.primary}}>商品名</th>
-                    <th style={{padding:8,textAlign:"center",fontWeight:700,color:T.primary}}>数量</th>
-                    <th style={{padding:8,textAlign:"right",fontWeight:700,color:T.primary}}>単価(USD)</th>
-                    <th style={{padding:8,textAlign:"right",fontWeight:700,color:T.primary}}>金額</th>
-                    <th style={{padding:8,textAlign:"center",fontWeight:700,color:T.primary}}>削除</th>
+                    <th style={{padding:8,textAlign:"left",fontWeight:700,color:T.text}}>商品名</th>
+                    <th style={{padding:8,textAlign:"center",fontWeight:700,color:T.text,fontSize:10}}>JAN</th>
+                    <th style={{padding:8,textAlign:"center",fontWeight:700,color:T.text}}>数量</th>
+                    <th style={{padding:8,textAlign:"right",fontWeight:700,color:T.text,fontSize:10}}>仕入原価</th>
+                    <th style={{padding:8,textAlign:"center",fontWeight:700,color:T.text,width:40}}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {docItems.map((item,idx)=>{
-                    const amount=item.selling_price*item.quantity;
-                    return(
+                  {docItems.map((item,idx)=>(
                       <tr key={idx} style={{borderBottom:`1px solid ${T.borderLight}`}}>
-                        <td style={{padding:8,textAlign:"left"}}>{item.name_en}</td>
+                        <td style={{padding:8,textAlign:"left"}}>{item.name_en||item.name_ja}</td>
+                        <td style={{padding:8,textAlign:"center",fontSize:10,color:T.muted}}>{item.jan}</td>
                         <td style={{padding:8,textAlign:"center"}}>
                           <input type="number" value={item.quantity} onChange={e=>updateItem(idx,"quantity",e.target.value)} min="1" style={{width:50,padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center"}}/>
                         </td>
-                        <td style={{padding:8,textAlign:"right"}}>
-                          <input type="number" value={item.selling_price} onChange={e=>updateItem(idx,"selling_price",e.target.value)} step="0.01" style={{width:70,padding:"4px 6px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"right"}}/>
-                        </td>
-                        <td style={{padding:8,textAlign:"right",fontWeight:600}}>${amount.toFixed(2)}</td>
+                        <td style={{padding:8,textAlign:"right",fontSize:10,color:T.sub}}>¥{(item.cost_price||0).toLocaleString()}</td>
                         <td style={{padding:8,textAlign:"center"}}>
-                          <button onClick={()=>removeItem(idx)} style={{background:T.red,color:"#fff",border:"none",borderRadius:4,padding:"3px 6px",fontSize:10,fontWeight:600,cursor:"pointer"}}>削除</button>
+                          <button onClick={()=>removeItem(idx)} style={{background:"none",border:"none",fontSize:12,cursor:"pointer",color:T.muted}}>✕</button>
                         </td>
                       </tr>
-                    );
-                  })}
+                  ))}
                 </tbody>
               </table>
-              <div style={{padding:12,background:T.borderLight,borderRadius:6,marginTop:8,display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr 1fr",gap:12,fontSize:12}}>
-                <div><strong>小計:</strong> ${subtotal.toFixed(2)}</div>
-                <div><strong>利益:</strong> ${totalProfit.toFixed(2)} ({overallMarginPct.toFixed(1)}%)</div>
-                <div><strong>仕入原価:</strong> ¥{totalCostJpy.toLocaleString()}</div>
+              <div style={{padding:10,background:T.bg,borderRadius:6,marginTop:8,display:"flex",gap:16,fontSize:11,color:T.sub}}>
+                <span>商品数: <strong style={{color:T.text}}>{docItems.length}種 / {docItems.reduce((s,i)=>s+i.quantity,0)}個</strong></span>
+                <span>仕入原価合計: <strong style={{color:T.text}}>¥{totalCostJpy.toLocaleString()}</strong></span>
+                <span style={{fontSize:10,color:T.muted}}>※ 提示価格は次の確認画面で自動計算されます</span>
               </div>
             </div>
           )}
@@ -5446,7 +5477,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.sub}}>{item.weight_g||0}</td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.sub}}>{item.price_break_qty>0?item.price_break_qty:"-"}</td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.text}}>¥{costTaxIncl.toLocaleString()}</td>
-                      <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,fontWeight:700,color:marginColor}}>{margin.toFixed(1)}%</td>
+                      <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={parseFloat(margin.toFixed(1))} onChange={e=>{const v=parseFloat(e.target.value);if(!isNaN(v)&&v<100)updateMargin(i,v)}} step="0.1" style={{width:52,padding:"4px",border:`1px solid ${marginColor}40`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:marginColor+"08",color:marginColor,fontWeight:700}}/></td>
                       <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.quantity} onChange={e=>updateItem(i,"quantity",e.target.value)} min="1" style={{width:48,padding:"4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:T.bg}}/></td>
                       <td style={{padding:"6px 4px",textAlign:"center",fontSize:10,color:T.text}}>¥{priceJpy.toLocaleString()}</td>
                       <td style={{padding:"3px 2px",textAlign:"center"}}><input type="number" value={item.selling_price} onChange={e=>updateItem(i,"selling_price",e.target.value)} step="0.01" style={{width:64,padding:"4px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,textAlign:"center",fontFamily:"inherit",background:T.bg}}/></td>
