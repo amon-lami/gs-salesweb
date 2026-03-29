@@ -4001,9 +4001,34 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[currencyRateEditable,setCurrencyRateEditable]=useState("");
 
   // State: UI
-  const[step,setStep]=useState(1);
+  const[step,_setStep]=useState(1);
   const[saving,setSaving]=useState(false);
   const[saveErr,setSaveErr]=useState("");
+
+  // Browser back support: push history on step change, pop to go back
+  const setStep=(newStep)=>{
+    _setStep(newStep);
+    window.history.pushState({_gs:true,view:"docBuilder",mode,step:newStep},"");
+  };
+  useEffect(()=>{
+    // Push initial state
+    window.history.pushState({_gs:true,view:"docBuilder",mode,step:1},"");
+    const handlePop=(e)=>{
+      const st=e.state;
+      if(st&&st._gs&&st.view==="docBuilder"){
+        _setStep(st.step);
+      }else if(st&&st._gs&&st.view==="docPage"){
+        // Going back to document menu
+        onBack?.();
+      }else if(!st||!st._gs){
+        // Leaving GS Sales territory — stay on builder step 1
+        window.history.pushState({_gs:true,view:"docBuilder",mode,step:1},"");
+        _setStep(1);
+      }
+    };
+    window.addEventListener("popstate",handlePop);
+    return()=>window.removeEventListener("popstate",handlePop);
+  },[]);
   const searchTimer=useRef(null);
 
   // Auto-generate doc number (with company name)
@@ -4910,7 +4935,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       {/* Header */}
       <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
-          <button onClick={onBack} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
+          <button onClick={()=>{if(step>1){window.history.back()}else{onBack?.()}}} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
           <h2 style={{margin:0,fontSize:15,fontWeight:700,color:T.primary}}>{mode==="quotation"?"見積書作成":"請求書作成"}</h2>
         </div>
         <div style={{display:"flex",gap:6}}>
@@ -5101,7 +5126,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           )}
 
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setStep(1)} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+            <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
             <button onClick={()=>setStep(3)} disabled={docItems.length===0} style={{flex:1,padding:10,background:docItems.length===0?"#ccc":T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:docItems.length===0?"default":"pointer",opacity:docItems.length===0?0.6:1}}>次へ →</button>
           </div>
         </div>
@@ -5179,7 +5204,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           )}
 
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setStep(2)} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+            <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
             <button onClick={()=>setStep(mode==="invoice"?4:4)} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
           </div>
         </div>
@@ -5219,7 +5244,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           )}
 
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setStep(3)} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+            <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
             <button onClick={()=>setStep(5)} style={{flex:1,padding:10,background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>次へ →</button>
           </div>
         </div>
@@ -5260,7 +5285,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
           {saveErr&&<div style={{padding:10,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,fontWeight:600}}>{saveErr}</div>}
 
           <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setStep(mode==="invoice"?4:3)} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
+            <button onClick={()=>window.history.back()} style={{flex:1,padding:10,background:"#fff",color:T.primary,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>← 戻る</button>
             <button onClick={generateExcel} style={{flex:1,padding:10,background:T.blue||"#3b82f6",color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>📥 Excel</button>
             <button onClick={saveDocument} disabled={saving} style={{flex:1,padding:10,background:saving?"#ccc":T.green,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:saving?"default":"pointer"}}>
               {saving?"保存中...":"保存+Excel"}
@@ -5277,7 +5302,26 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
 function DocumentsPage({client,user,allUsers,accounts,contacts,deals}){
 const IS_MOBILE=window.innerWidth<768;
 const DEFAULT_JPY_RATE=150;
-const[docPage,setDocPage]=useState("menu");
+const[docPage,_setDocPage]=useState("menu");
+const setDocPage=(pg)=>{
+  _setDocPage(pg);
+  if(pg==="menu"){
+    window.history.replaceState({_gs:true,view:"docPage",docPage:"menu"},"");
+  }else{
+    window.history.pushState({_gs:true,view:"docPage",docPage:pg},"");
+  }
+};
+useEffect(()=>{
+  window.history.replaceState({_gs:true,view:"docPage",docPage:"menu"},"");
+  const handleDocPop=(e)=>{
+    const st=e.state;
+    if(st&&st._gs&&st.view==="docPage"){
+      _setDocPage(st.docPage||"menu");
+    }
+  };
+  window.addEventListener("popstate",handleDocPop);
+  return()=>window.removeEventListener("popstate",handleDocPop);
+},[]);
 const[products,setProducts]=useState([]);
 const[loading,setLoading]=useState(false);
 const[error,setError]=useState("");
@@ -5413,7 +5457,7 @@ if(docPage==="master"){return(
 <div style={{padding:IS_MOBILE?"10px":"16px",background:T.bg,minHeight:"100%"}}>
   {/* Header */}
   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-    <button onClick={()=>setDocPage("menu")} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
+    <button onClick={()=>window.history.back()} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
     <h2 style={{fontSize:15,fontWeight:700,color:T.primary,margin:0,flex:1}}>商品マスタ <span style={{fontSize:11,fontWeight:400,color:T.muted}}>({totalCount}件)</span></h2>
     <button onClick={()=>openEdit(null)} style={{padding:"6px 12px",background:T.green,color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>+ 新規</button>
     <label style={{padding:"6px 12px",background:T.blue||"#3b82f6",color:"#fff",borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}}>
@@ -5564,7 +5608,7 @@ return <QuotationInvoiceBuilder mode={docPage} client={client} user={user} accou
 return(
 <div style={{padding:16,background:T.bg,minHeight:"100%"}}>
   <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-    <button onClick={()=>setDocPage("menu")} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
+    <button onClick={()=>window.history.back()} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",padding:0,color:T.sub}}>←</button>
     <h2 style={{fontSize:15,fontWeight:700,color:T.primary,margin:0}}>納品書作成</h2>
   </div>
   <div style={{padding:40,background:T.card,borderRadius:12,textAlign:"center"}}>
