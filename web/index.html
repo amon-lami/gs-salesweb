@@ -3122,8 +3122,30 @@ function ChatPanel({deal,client,user,allUsers,accounts,onUpdated}){
   );
 }
 
+// ── Next Action Helper ──
+function getNextAction(deal,dealDocs,orderItems){
+  const stage=deal.stage;const stageObj=STAGES.find(s=>s.id===stage);const phase=stageObj?.phase;
+  const hasQuote=dealDocs.some(d=>d.doc_type==="quotation");
+  const hasInvoice=dealDocs.some(d=>d.doc_type==="invoice");
+  const hasDelivery=dealDocs.some(d=>d.doc_type==="delivery");
+  const allItemsOrdered=orderItems.length>0&&orderItems.every(it=>it.status!=="pending");
+  const allArrived=orderItems.length>0&&orderItems.every(it=>["gs_arrived","sg_arrived","ub_arrived","delivered","packed","shipped"].includes(it.status));
+  const allShipped=orderItems.length>0&&orderItems.every(it=>["shipped","delivered"].includes(it.status));
+  const allHaveTracking=orderItems.length>0&&orderItems.every(it=>it.tracking_number);
+  if(stage==="negotiation"&&!hasQuote)return{msg:"見積書を作成しましょう",icon:"📝",action:"quote",color:"#3b82f6"};
+  if(stage==="negotiation"&&hasQuote&&!hasInvoice)return{msg:"請求書を作成して送付しましょう",icon:"📨",action:"invoice",color:"#2d8cf0"};
+  if(stage==="invoice_sent"&&(deal.prepayment_percent||0)<100)return{msg:"入金を確認してください",icon:"💰",action:"payment",color:"#f59e0b"};
+  if(stage==="order_pending"&&orderItems.length===0)return{msg:"書類から発注に反映してください",icon:"📦",action:"docs",color:"#8b5cf6"};
+  if(stage==="order_pending"&&orderItems.length>0&&!allItemsOrdered)return{msg:"仕入先に発注しましょう",icon:"🛒",color:"#22c55e"};
+  if(stage==="order_completed"&&!allArrived)return{msg:"入荷を待っています",icon:"🚚",color:"#f59e0b"};
+  if(stage==="goods_received"&&!hasDelivery)return{msg:"納品書を作成して発送しましょう",icon:"📋",action:"delivery",color:"#06b6d4"};
+  if(stage==="shipped"&&!allHaveTracking)return{msg:"追跡番号を入力してください",icon:"🔍",action:"tracking",color:"#ec4899"};
+  if(phase==="done")return{msg:"この商談は完了しています",icon:"✅",color:T.green};
+  return null;
+}
+
 // ── Deal Detail View ──
-function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdated,onStageChange,onEdit,onOpenAcct,onOpenContact,leadActions}){
+function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdated,onStageChange,onEdit,onOpenAcct,onOpenContact,leadActions,onNavigateToDocBuilder}){
   const acct=accounts.find(a=>a.id===deal.account_id);
   const dealContacts=contacts.filter(c=>c.account_id===deal.account_id);
   const stageObj=STAGES.find(s=>s.id===deal.stage);
@@ -3136,14 +3158,17 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
   const[confirmFileDeleteId,setConfirmFileDeleteId]=useState(null);
   const[orderItems,setOrderItems]=useState([]);
   const[orderStatuses,setOrderStatuses]=useState([]);
+  const[dealDocs,setDealDocs]=useState([]);
+  const[stageToast,setStageToast]=useState(null);
 
   useEffect(()=>{
     (async()=>{
-      const[{data:oi},{data:os}]=await Promise.all([
+      const[{data:oi},{data:os},{data:dd}]=await Promise.all([
         client.from("order_items").select("*").eq("deal_id",deal.id).order("created_at"),
-        client.from("order_statuses").select("*").order("sort_order")
+        client.from("order_statuses").select("*").order("sort_order"),
+        client.from("generated_documents").select("*").eq("deal_id",deal.id).order("created_at",{ascending:false})
       ]);
-      setOrderItems(oi||[]);setOrderStatuses(os||[]);
+      setOrderItems(oi||[]);setOrderStatuses(os||[]);setDealDocs(dd||[]);
     })();
   },[deal.id]);
 
@@ -3260,6 +3285,31 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
         </div>
       </div>
 
+      {/* Next Action Guide Banner */}
+      {(()=>{
+        const na=getNextAction(deal,dealDocs,orderItems);
+        if(!na)return null;
+        return(
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:na.color+"10",border:`1px solid ${na.color}30`,borderRadius:8,marginBottom:12}}>
+            <span style={{fontSize:18}}>{na.icon}</span>
+            <span style={{flex:1,fontSize:12,fontWeight:600,color:na.color}}>{na.msg}</span>
+            {na.action==="quote"&&onNavigateToDocBuilder&&<button onClick={()=>onNavigateToDocBuilder("quotation",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"4px 12px",borderRadius:6,border:`1px solid ${na.color}`,background:na.color,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>見積書作成</button>}
+            {na.action==="invoice"&&onNavigateToDocBuilder&&<button onClick={()=>onNavigateToDocBuilder("invoice",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"4px 12px",borderRadius:6,border:`1px solid ${na.color}`,background:na.color,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>請求書作成</button>}
+            {na.action==="delivery"&&onNavigateToDocBuilder&&<button onClick={()=>onNavigateToDocBuilder("delivery",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"4px 12px",borderRadius:6,border:`1px solid ${na.color}`,background:na.color,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>納品書作成</button>}
+          </div>
+        );
+      })()}
+
+      {/* Stage Toast for auto-progression */}
+      {stageToast&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#22c55e10",border:"1px solid #22c55e30",borderRadius:8,marginBottom:12}}>
+          <span style={{fontSize:14}}>🎯</span>
+          <span style={{flex:1,fontSize:12,fontWeight:600,color:"#22c55e"}}>{stageToast.msg}</span>
+          <button onClick={()=>{moveSta(stageToast.target);setStageToast(null)}} style={{padding:"4px 12px",borderRadius:6,border:"1px solid #22c55e",background:"#22c55e",color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>進める</button>
+          <button onClick={()=>setStageToast(null)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.sub,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+        </div>
+      )}
+
       <div style={{display:"flex",flexDirection:IS_MOBILE?"column":"row",gap:12,flex:1,minHeight:0}}>
         {/* Left: Deal Info + Spreadsheet */}
         <div style={{width:IS_MOBILE?"auto":280,minWidth:IS_MOBILE?0:280,overflowY:"auto"}}>
@@ -3321,31 +3371,97 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
             {dealContacts.length===0&&<div style={{fontSize:11,color:"#ccc"}}>コンタクトなし</div>}
           </div>
 
-          {/* Order Items Section */}
-          {orderItems.length>0&&(
-            <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginTop:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span>発注品目 ({orderItems.length})</span>
-                <span style={{fontSize:10,color:T.muted,fontWeight:400}}>¥{orderItems.reduce((s,it)=>s+Math.round((it.cost_price||0)*1.1*it.quantity),0).toLocaleString()}</span>
-              </div>
-              {orderItems.map(it=>{
-                const st=orderStatuses.find(s=>s.id===it.status);
-                return React.createElement("div",{key:it.id,style:{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:`1px solid ${T.borderLight}`,fontSize:11}},
-                  React.createElement("div",{style:{flex:1,minWidth:0}},
-                    React.createElement("div",{style:{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5}},it.name_en||it.name_ja),
-                    React.createElement("div",{style:{fontSize:9,color:T.muted}},it.quantity+"pcs · "+(it.supplier||""))
-                  ),
-                  React.createElement("select",{value:it.status,onChange:async(e)=>{
-                    const ns=e.target.value;
-                    await client.from("order_items").update({status:ns}).eq("id",it.id);
-                    setOrderItems(prev=>prev.map(x=>x.id===it.id?{...x,status:ns}:x));
-                  },style:{padding:"1px 4px",border:"none",borderRadius:4,fontSize:9,fontWeight:600,fontFamily:"inherit",cursor:"pointer",background:st?st.color+"25":"#eee",color:st?st.color:T.sub}},
-                    orderStatuses.map(s=>React.createElement("option",{key:s.id,value:s.id},s.label))
-                  )
-                );
-              })}
+          {/* Documents Section */}
+          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>📄 書類 ({dealDocs.length})</span>
+              {onNavigateToDocBuilder&&<div style={{display:"flex",gap:4}}>
+                <button onClick={()=>onNavigateToDocBuilder("quotation",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.primary}30`,background:T.primary+"10",color:T.primary,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+見積</button>
+                <button onClick={()=>onNavigateToDocBuilder("invoice",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent}30`,background:T.accent+"10",color:T.accent,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+請求</button>
+                <button onClick={()=>onNavigateToDocBuilder("delivery",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"2px 8px",borderRadius:4,border:"1px solid #06b6d430",background:"#06b6d410",color:"#06b6d4",fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+納品</button>
+              </div>}
             </div>
-          )}
+            {dealDocs.length===0?<div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"8px 0"}}>書類がまだありません</div>:
+              dealDocs.map(doc=>{
+                const tc=doc.doc_type==="quotation"?T.primary:doc.doc_type==="invoice"?T.accent:"#06b6d4";
+                const tl=doc.doc_type==="quotation"?"見積書":doc.doc_type==="invoice"?"請求書":"納品書";
+                return(
+                  <div key={doc.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.borderLight}`}}>
+                    <span style={{padding:"1px 6px",borderRadius:3,background:tc+"15",color:tc,fontSize:8,fontWeight:700}}>{tl}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:10.5,fontWeight:600,color:T.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.doc_number||"番号なし"}</div>
+                      <div style={{fontSize:9,color:T.muted}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""} · {doc.currency||"USD"} {(doc.total||0).toLocaleString()}</div>
+                    </div>
+                    {doc.doc_type==="quotation"&&onNavigateToDocBuilder&&<button onClick={()=>onNavigateToDocBuilder("invoice",{deal_id:deal.id,account_id:deal.account_id,fromDoc:doc})} style={{padding:"2px 6px",borderRadius:3,border:`1px solid ${T.accent}`,background:"transparent",color:T.accent,fontSize:8,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>請求書作成</button>}
+                  </div>
+                );
+              })
+            }
+          </div>
+
+          {/* Order Items Section - Enhanced */}
+          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginTop:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>📦 発注品目 ({orderItems.length})</span>
+              <span style={{fontSize:10,color:T.muted,fontWeight:400}}>¥{orderItems.reduce((s,it)=>s+Math.round((it.cost_price||0)*1.1*it.quantity),0).toLocaleString()}</span>
+            </div>
+            {orderItems.length===0?<div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"8px 0"}}>発注品目がまだありません</div>:
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:10}}>
+                <thead>
+                  <tr style={{borderBottom:`1px solid ${T.border}`}}>
+                    <th style={{textAlign:"left",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>商品名</th>
+                    <th style={{textAlign:"center",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>数量</th>
+                    <th style={{textAlign:"left",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>仕入先</th>
+                    <th style={{textAlign:"center",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>ステータス</th>
+                    <th style={{textAlign:"right",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>下代</th>
+                    <th style={{textAlign:"right",padding:"4px 4px",fontWeight:700,color:T.muted,fontSize:9}}>総額</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orderItems.map(it=>{
+                    const st=orderStatuses.find(s=>s.id===it.status);
+                    const costTotal=Math.round((it.cost_price||0)*1.1*it.quantity);
+                    return(
+                      <tr key={it.id} style={{borderBottom:`1px solid ${T.borderLight}`}}>
+                        <td style={{padding:"5px 4px",fontWeight:600,maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name_en||it.name_ja}</td>
+                        <td style={{padding:"5px 4px",textAlign:"center"}}>{it.quantity}</td>
+                        <td style={{padding:"5px 4px",color:T.sub}}>{it.supplier||"-"}</td>
+                        <td style={{padding:"4px 4px",textAlign:"center"}}>
+                          <select value={it.status} onChange={async(e)=>{
+                            const ns=e.target.value;
+                            await client.from("order_items").update({status:ns}).eq("id",it.id);
+                            const updated=orderItems.map(x=>x.id===it.id?{...x,status:ns}:x);
+                            setOrderItems(updated);
+                            // Phase 3: Auto-stage progression suggestions
+                            const allOrdered=updated.every(x=>x.status!=="pending");
+                            const allArrived=updated.every(x=>["gs_arrived","sg_arrived","ub_arrived","delivered","packed","shipped"].includes(x.status));
+                            const allShipped=updated.every(x=>["shipped","delivered"].includes(x.status));
+                            if(deal.stage==="order_pending"&&allOrdered&&!allArrived)setStageToast({msg:"全品目の発注が完了しました。ステージを「発注完了」に進めますか？",target:"order_completed"});
+                            else if((deal.stage==="order_pending"||deal.stage==="order_completed")&&allArrived&&!allShipped)setStageToast({msg:"全品目が入荷しました。ステージを「入荷済」に進めますか？",target:"goods_received"});
+                            else if((deal.stage==="goods_received"||deal.stage==="order_completed")&&allShipped)setStageToast({msg:"全品目が発送済です。ステージを「発送済」に進めますか？",target:"shipped"});
+                          }} style={{padding:"1px 4px",border:"none",borderRadius:4,fontSize:9,fontWeight:600,fontFamily:"inherit",cursor:"pointer",background:st?st.color+"25":"#eee",color:st?st.color:T.sub}}>
+                            {orderStatuses.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                          </select>
+                        </td>
+                        <td style={{padding:"5px 4px",textAlign:"right",fontSize:9,color:T.sub}}>¥{(it.cost_price||0).toLocaleString()}</td>
+                        <td style={{padding:"5px 4px",textAlign:"right",fontWeight:600}}>¥{costTotal.toLocaleString()}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{borderTop:`1.5px solid ${T.border}`}}>
+                    <td style={{padding:"5px 4px",fontWeight:700,fontSize:9}}>合計 {orderItems.length}品目</td>
+                    <td style={{padding:"5px 4px",textAlign:"center",fontWeight:600}}>{orderItems.reduce((s,it)=>s+it.quantity,0)}</td>
+                    <td colSpan="2"></td>
+                    <td></td>
+                    <td style={{padding:"5px 4px",textAlign:"right",fontWeight:700}}>¥{orderItems.reduce((s,it)=>s+Math.round((it.cost_price||0)*1.1*it.quantity),0).toLocaleString()}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>}
+          </div>
         </div>
 
         {/* Center: Timeline */}
@@ -5595,7 +5711,7 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,leads
 
 
 // ── Order Management Page (発注管理) ──
-function OrderManagementPage({client,user,accounts,deals,onBack}){
+function OrderManagementPage({client,user,accounts,deals,onBack,onOpenDeal}){
 const IS_MOBILE=window.innerWidth<768;
 const[items,setItems]=useState([]);
 const[statuses,setStatuses]=useState([]);
@@ -5773,7 +5889,7 @@ return React.createElement("div",{style:{display:"flex",flexDirection:"column",h
             React.createElement("td",{style:{padding:"4px 4px",textAlign:"center",fontSize:10}},item.case_quantity&&item.case_quantity>0?(item.quantity/item.case_quantity).toFixed(1)+"ケース":"-"),
             // 商談
             React.createElement("td",{style:{padding:"4px 4px",fontSize:10}},
-              React.createElement("span",{style:{padding:"1px 6px",borderRadius:4,background:T.accent+"15",color:T.accent,fontWeight:600,fontSize:9}},
+              React.createElement("span",{style:{padding:"1px 6px",borderRadius:4,background:T.accent+"15",color:T.accent,fontWeight:600,fontSize:9,cursor:item.deal_id&&dealMap[item.deal_id]?"pointer":"default"},onClick:()=>{const d=item.deal_id&&dealMap[item.deal_id];if(d&&onOpenDeal)onOpenDeal(d)},onMouseEnter:e=>{if(item.deal_id&&dealMap[item.deal_id])e.currentTarget.style.textDecoration="underline"},onMouseLeave:e=>e.currentTarget.style.textDecoration="none"},
                 item.deal_id&&dealMap[item.deal_id]?dealMap[item.deal_id].name:accountMap[item.account_id]||"-"
               )
             ),
@@ -6381,7 +6497,7 @@ return(
 
 
 // ── Document List View (書類一覧) ──
-function DocumentListView({client,user,accounts,deals,onBack,onCreateInvoice}){
+function DocumentListView({client,user,accounts,deals,onBack,onCreateInvoice,onOpenDeal}){
 const IS_MOBILE=window.innerWidth<768;
 const[docs,setDocs]=useState([]);
 const[loading,setLoading]=useState(true);
@@ -6502,7 +6618,7 @@ return(
               <td style={{padding:"10px 14px"}}><span style={{padding:"2px 8px",borderRadius:4,background:tc+"15",color:tc,fontSize:9,fontWeight:700}}>{typeLabel(doc.doc_type)}</span></td>
               <td style={{padding:"10px 10px",fontWeight:600,color:T.text,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.doc_number||"番号なし"}</td>
               <td style={{padding:"10px 10px",color:T.sub}}>{acctName}</td>
-              {!IS_MOBILE&&<td style={{padding:"10px 10px",color:dealObj?T.text:T.muted,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dealObj?dealObj.name:"—"}</td>}
+              {!IS_MOBILE&&<td style={{padding:"10px 10px",color:dealObj?T.accent:T.muted,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",cursor:dealObj?"pointer":"default",fontWeight:dealObj?600:400}} onClick={()=>{if(dealObj&&onOpenDeal)onOpenDeal(dealObj)}} onMouseEnter={e=>{if(dealObj)e.currentTarget.style.textDecoration="underline"}} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>{dealObj?dealObj.name:"—"}</td>}
               {!IS_MOBILE&&<td style={{padding:"10px 10px",textAlign:"center",fontWeight:600}}>{itemCount}</td>}
               <td style={{padding:"10px 10px",textAlign:"right",fontWeight:700,color:T.text}}>{doc.currency||"USD"} {(doc.total||0).toLocaleString()}</td>
               {!IS_MOBILE&&<td style={{padding:"10px 10px",textAlign:"center",fontSize:10,color:T.muted}}>{doc.created_at?new Date(doc.created_at).toLocaleDateString("ja-JP"):""}</td>}
@@ -6522,7 +6638,7 @@ return(
 
 
 // ── Documents Page ──
-function DocumentsPage({client,user,allUsers,accounts,contacts,deals,leads,currentBiz,onReload}){
+function DocumentsPage({client,user,allUsers,accounts,contacts,deals,leads,currentBiz,onReload,onOpenDeal,pendingDocCreate}){
 const IS_MOBILE=window.innerWidth<768;
 const DEFAULT_JPY_RATE=150;
 const[docPage,_setDocPage]=useState("menu");
@@ -6546,6 +6662,15 @@ useEffect(()=>{
   window.addEventListener("popstate",handleDocPop);
   return()=>window.removeEventListener("popstate",handleDocPop);
 },[]);
+// Auto-navigate from pendingDocCreate (e.g. from DealDetail)
+useEffect(()=>{
+  if(pendingDocCreate){
+    const{type,prefill}=pendingDocCreate;
+    if(prefill)setPrefillDoc(prefill);
+    _setDocPage(type);
+    window.history.pushState({_gs:true,view:"docPage",docPage:type},"");
+  }
+},[pendingDocCreate]);
 const[products,setProducts]=useState([]);
 const[loading,setLoading]=useState(false);
 const[error,setError]=useState("");
@@ -6862,12 +6987,12 @@ return <QuotationInvoiceBuilder key={prefillDoc?.id||docPage} mode={docPage} cli
 
 // ── Order Management (embedded in documents) ──
 if(docPage==="orders"){
-return <OrderManagementPage client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")}/>;
+return <OrderManagementPage client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")} onOpenDeal={onOpenDeal}/>;
 }
 
 // ── Document List (書類一覧) ──
 if(docPage==="doc_list"){
-return <DocumentListView client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")} onCreateInvoice={(doc)=>{setPrefillDoc(doc);setDocPage("invoice")}}/>;
+return <DocumentListView client={client} user={user} accounts={accounts} deals={deals} onBack={()=>setDocPage("menu")} onCreateInvoice={(doc)=>{setPrefillDoc(doc);setDocPage("invoice")}} onOpenDeal={onOpenDeal}/>;
 }
 
 // ── Delivery Note → DeliveryNoteBuilder ──
@@ -8166,6 +8291,7 @@ function App(){
   const[showAcctForm,setShowAcctForm]=useState(false);const[editAcct,setEditAcct]=useState(null);
   const[showContactForm,setShowContactForm]=useState(false);const[editContact,setEditContact]=useState(null);
   const[detailDeal,setDetailDeal]=useState(null);const[detailAcct,setDetailAcct]=useState(null);const[detailContact,setDetailContact]=useState(null);const[detailLead,setDetailLead]=useState(null);
+  const[pendingDocCreate,setPendingDocCreate]=useState(null);
   const[pendingDrop,setPendingDrop]=useState(null);
   const[globalSearch,setGlobalSearch]=useState("");
   const[showGlobalSearch,setShowGlobalSearch]=useState(false);
@@ -8567,7 +8693,8 @@ function App(){
     const freshDeal=deals.find(d=>d.id===detailDeal.id)||detailDeal;
     return(<div style={{height:"100%",display:"flex",flexDirection:"column"}}><Header/>
       <DealDetail deal={freshDeal} accounts={accounts} contacts={contacts} client={client} user={user} allUsers={allUsers} leadActions={leadActions}
-        onBack={goBack} onUpdated={reload} onStageChange={(id,upd)=>setDeals(prev=>prev.map(d=>d.id===id?{...d,...upd}:d))} onEdit={()=>{setEditDeal(freshDeal);setShowDealForm(true)}} onOpenAcct={(a)=>openAcct(a)} onOpenContact={(ct)=>openContact(ct)}/>
+        onBack={goBack} onUpdated={reload} onStageChange={(id,upd)=>setDeals(prev=>prev.map(d=>d.id===id?{...d,...upd}:d))} onEdit={()=>{setEditDeal(freshDeal);setShowDealForm(true)}} onOpenAcct={(a)=>openAcct(a)} onOpenContact={(ct)=>openContact(ct)}
+        onNavigateToDocBuilder={(type,prefill)=>{setPendingDocCreate({type,prefill});navigatePage("documents")}}/>
       {showSettings&&<Settings config={config||{}} onSave={handleSaveSettings} onClose={()=>setShowSettings(false)}/>}
       {showDealForm&&<DealForm client={client} user={user} accounts={bizAccounts} deal={editDeal} allUsers={allUsers} deals={bizDeals} categories={categories} currentBiz={currentBiz} onClose={()=>setShowDealForm(false)} onSaved={reload}/>}
     </div>);
@@ -8641,7 +8768,7 @@ function App(){
           {page==="reports"&&<WeeklyReportPage deals={deals} accounts={accounts} client={client} user={user} allUsers={allUsers} onOpenDeal={d=>openDealDetail(d)}/>}
           {page==="expenses"&&<ExpensePage client={client} user={user} allUsers={allUsers} accounts={accounts}/>}
           {page==="todos"&&<TodoOverviewPage deals={deals} accounts={accounts} client={client} user={user} allUsers={allUsers} onOpenDeal={d=>openDealDetail(d)}/>}
-          {page==="documents"&&<DocumentsPage client={client} user={user} allUsers={allUsers} accounts={accounts} contacts={contacts} deals={deals} leads={leads} currentBiz={currentBiz} onReload={reload}/>}
+          {page==="documents"&&<DocumentsPage client={client} user={user} allUsers={allUsers} accounts={accounts} contacts={contacts} deals={deals} leads={leads} currentBiz={currentBiz} onReload={reload} onOpenDeal={d=>openDealDetail(d)} pendingDocCreate={pendingDocCreate}/>}
 
 
           {page==="deals"&&(<>
