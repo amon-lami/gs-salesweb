@@ -4160,9 +4160,9 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     setSelectedAccount(acc);
     setClientInfo({
       companyName:acc.name||"",
-      address:acc.address||"",
+      address:acc.address_billing||acc.address||"",
       city:"",
-      country:"",
+      country:acc.country||"",
       phone:acc.phone||"",
       contactPerson:"",
       email:""
@@ -5133,20 +5133,24 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
               <input value={clientInfo.contactPerson} onChange={e=>setClientInfo(prev=>({...prev,contactPerson:e.target.value}))} placeholder="例: John Smith" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
             </div>
             <div>
+              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>国</div>
+              <CountryInput value={clientInfo.country} onChange={v=>setClientInfo(prev=>({...prev,country:v}))} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            <div>
               <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>住所</div>
               <input value={clientInfo.address} onChange={e=>setClientInfo(prev=>({...prev,address:e.target.value}))} placeholder="Street address" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
             </div>
             <div>
-              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>都市/国</div>
-              <input value={clientInfo.city} onChange={e=>setClientInfo(prev=>({...prev,city:e.target.value}))} placeholder="City, Country" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
-            </div>
-            <div>
-              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>電話</div>
-              <input value={clientInfo.phone} onChange={e=>setClientInfo(prev=>({...prev,phone:e.target.value}))} placeholder="Phone" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>都市</div>
+              <input value={clientInfo.city} onChange={e=>setClientInfo(prev=>({...prev,city:e.target.value}))} placeholder="City" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
             </div>
             <div>
               <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>メール</div>
               <input value={clientInfo.email} onChange={e=>setClientInfo(prev=>({...prev,email:e.target.value}))} placeholder="Email" type="email" style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>電話</div>
+              <PhoneInput value={clientInfo.phone} onChange={e=>setClientInfo(prev=>({...prev,phone:e.target.value}))} country={clientInfo.country||selectedAccount?.country||""} placeholder="電話番号" style={{width:"100%",padding:"8px 10px",paddingLeft:75,border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
             </div>
           </div>
 
