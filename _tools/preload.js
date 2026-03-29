@@ -1,0 +1,11 @@
+const{contextBridge,ipcRenderer}=require("electron");
+contextBridge.exposeInMainWorld("api",{
+  getConfig:()=>ipcRenderer.invoke("get-config"),
+  saveConfig:(cfg)=>ipcRenderer.invoke("save-config",cfg),
+  getPlatform:()=>ipcRenderer.invoke("get-platform"),
+  openUrl:(url)=>ipcRenderer.invoke("open-url",url),
+  winMinimize:()=>ipcRenderer.invoke("win-minimize"),
+  winMaximize:()=>ipcRenderer.invoke("win-maximize"),
+  winClose:()=>ipcRenderer.invoke("win-close"),
+  onNavigateDeal:(callback)=>ipcRenderer.on("navigate-deal",(event,dealId)=>callback(dealId))
+});

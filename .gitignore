@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.timestamp-*.mjs
+
+# Environment / Secrets
+.env
+.env.*
+.env.local
+.env*.local
+
+# Vercel
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data exports
+Salesforce cvs/
+
+# Backups
+*.bak
+*.bak2
+*.bak3
