@@ -3909,6 +3909,36 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
   const[addQty,setAddQty]=useState(1);
   const[jpy_rate,setJpyRate]=useState(150);
 
+  // State: Account/Deal search
+  const[acctSearch,setAcctSearch]=useState("");
+  const[acctDropOpen,setAcctDropOpen]=useState(false);
+  const acctDropRef=useRef(null);
+  const[dealSearch,setDealSearch]=useState("");
+  const[dealDropOpen,setDealDropOpen]=useState(false);
+  const dealDropRef=useRef(null);
+
+  const filteredAccounts=useMemo(()=>{
+    if(!acctSearch)return(accounts||[]).slice(0,20);
+    const q=acctSearch.toLowerCase();
+    return(accounts||[]).filter(a=>a.name?.toLowerCase().includes(q)).slice(0,20);
+  },[accounts,acctSearch]);
+
+  const filteredDeals=useMemo(()=>{
+    const base=selectedAccount?(deals||[]).filter(d=>d.account_id===selectedAccount.id):(deals||[]);
+    if(!dealSearch)return base.slice(0,20);
+    const q=dealSearch.toLowerCase();
+    return base.filter(d=>d.opportunity_name?.toLowerCase().includes(q)).slice(0,20);
+  },[deals,dealSearch,selectedAccount]);
+
+  // Close dropdowns on outside click
+  useEffect(()=>{
+    const handler=(e)=>{
+      if(acctDropRef.current&&!acctDropRef.current.contains(e.target))setAcctDropOpen(false);
+      if(dealDropRef.current&&!dealDropRef.current.contains(e.target))setDealDropOpen(false);
+    };
+    document.addEventListener("mousedown",handler);return()=>document.removeEventListener("mousedown",handler);
+  },[]);
+
   // State: Shipping
   const[incoterm,setIncoterm]=useState("DAP");
   const[carrier,setCarrier]=useState("UPS");
@@ -4638,8 +4668,13 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       if(error)throw error;
 
       setSaveErr("");
-      // Auto-download Excel after save
-      try{await generateExcel()}catch(ex){console.error("Excel generation failed:",ex)}
+      // Auto-download Excel + attach to deal if linked
+      try{
+        const xlsxBlob=await generateExcel();
+        if(xlsxBlob&&selectedDeal){
+          await attachExcelToDeal(xlsxBlob);
+        }
+      }catch(ex){console.error("Excel generation/attach failed:",ex)}
       onBack?.();
     }catch(e){
       setSaveErr(e.message);
@@ -4839,6 +4874,33 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    return blob;
+  };
+
+  // ── Attach Excel to Deal ──
+  const attachExcelToDeal=async(blob)=>{
+    if(!selectedDeal||!client||!user)return;
+    const fileName=`${docNumber}.xlsx`;
+    const safeName=Date.now()+"_"+Math.random().toString(36).slice(2,8)+".xlsx";
+    const ct="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    if(mode==="quotation"){
+      // 見積書 → 商談ファイル (sales_deal_files)
+      const fp="sales/"+selectedDeal.id+"/"+safeName;
+      const{error:ue}=await client.storage.from("chat-files").upload(fp,blob,{cacheControl:"3600",upsert:true,contentType:ct});
+      if(ue){console.error("Upload error:",ue);return}
+      const{data:ud}=client.storage.from("chat-files").getPublicUrl(fp);
+      await client.from("sales_deal_files").insert({deal_id:selectedDeal.id,name:fileName,url:ud?.publicUrl||"",file_type:ct,size:blob.size,uploaded_by:user.id});
+    }else{
+      // 請求書 → 商談の invoice_files
+      const fp="invoices/"+selectedDeal.id+"/"+safeName;
+      const{error:ue}=await client.storage.from("chat-files").upload(fp,blob,{cacheControl:"3600",upsert:true,contentType:ct});
+      if(ue){console.error("Upload error:",ue);return}
+      const{data:ud}=client.storage.from("chat-files").getPublicUrl(fp);
+      const existingFiles=getInvoiceFiles(selectedDeal);
+      const newFiles=[...existingFiles,{url:ud?.publicUrl||"",name:fileName,date:new Date().toISOString().split("T")[0]}];
+      await client.from("sales_deals").update({invoice_files:newFiles,invoice_file_url:newFiles[0]?.url||null,updated_at:new Date().toISOString()}).eq("id",selectedDeal.id);
+    }
   };
 
   const grand=(subtotal+shippingCost)*(mode==="invoice"?currencyRate:1);
@@ -4859,29 +4921,32 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       {/* Step 1: Client Info */}
       {step===1&&(
         <div style={{background:T.card,borderRadius:12,padding:16,display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:12}}>
-          <div>
+          <div ref={acctDropRef} style={{position:"relative"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>顧客選択</div>
-            <select value={selectedAccount?.id||""} onChange={e=>{const a=accounts.find(x=>x.id===e.target.value);if(a)handleSelectAccount(a)}} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}>
-              <option value="">-- アカウント選択 --</option>
-              {(accounts||[]).map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-            {selectedAccount&&<div style={{fontSize:9,color:T.muted,marginTop:4}}>✓ {selectedAccount.name}</div>}
+            <input value={acctDropOpen?acctSearch:(selectedAccount?.name||"")} onChange={e=>{setAcctSearch(e.target.value);setAcctDropOpen(true)}} onFocus={()=>{setAcctSearch("");setAcctDropOpen(true)}} placeholder="顧客名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${acctDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+            {selectedAccount&&!acctDropOpen&&<button onClick={()=>{setSelectedAccount(null);setSelectedContact(null);setSelectedDeal(null);setAcctSearch("");setClientInfo({companyName:"",address:"",city:"",country:"",phone:"",contactPerson:"",email:""})}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
+            {acctDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
+              {filteredAccounts.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当なし</div>}
+              {filteredAccounts.map(a=><div key={a.id} onClick={()=>{handleSelectAccount(a);setAcctDropOpen(false);setAcctSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:selectedAccount?.id===a.id?T.primary+"15":"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"10"} onMouseLeave={e=>e.currentTarget.style.background=selectedAccount?.id===a.id?T.primary+"15":"transparent"}>{a.name}</div>)}
+            </div>}
           </div>
           <div>
             <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>担当者</div>
-            <select value={selectedContact?.id||""} onChange={e=>{const c=filteredContacts.find(x=>x.id===e.target.value);if(c)handleSelectContact(c)}} disabled={!selectedAccount} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",opacity:!selectedAccount?0.5:1}}>
+            <select value={selectedContact?.id||""} onChange={e=>{const c=filteredContacts.find(x=>x.id===e.target.value);if(c)handleSelectContact(c)}} disabled={!selectedAccount} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",opacity:!selectedAccount?0.5:1,boxSizing:"border-box"}}>
               <option value="">-- 担当者選択 --</option>
               {filteredContacts.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             {selectedContact&&<div style={{fontSize:9,color:T.muted,marginTop:4}}>✓ {selectedContact.name}</div>}
           </div>
 
-          <div style={{gridColumn:IS_MOBILE?"auto":"span 2"}}>
+          <div ref={dealDropRef} style={{gridColumn:IS_MOBILE?"auto":"span 2",position:"relative"}}>
             <div style={{fontSize:10,fontWeight:700,color:T.muted,marginBottom:4}}>案件リンク（オプション）</div>
-            <select value={selectedDeal?.id||""} onChange={e=>{const d=deals.find(x=>x.id===e.target.value);setSelectedDeal(d||null)}} style={{width:"100%",padding:"8px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}>
-              <option value="">-- 案件を選択 --</option>
-              {(deals||[]).map(d=><option key={d.id} value={d.id}>{d.opportunity_name}</option>)}
-            </select>
+            <input value={dealDropOpen?dealSearch:(selectedDeal?.opportunity_name||"")} onChange={e=>{setDealSearch(e.target.value);setDealDropOpen(true)}} onFocus={()=>{setDealSearch("");setDealDropOpen(true)}} placeholder="案件名を検索..." style={{width:"100%",padding:"8px 10px",border:`1px solid ${dealDropOpen?T.primary:T.border}`,borderRadius:6,fontSize:12,fontFamily:"inherit",boxSizing:"border-box"}}/>
+            {selectedDeal&&!dealDropOpen&&<button onClick={()=>{setSelectedDeal(null);setDealSearch("")}} style={{position:"absolute",right:8,top:22,background:"none",border:"none",fontSize:14,cursor:"pointer",color:T.muted}}>✕</button>}
+            {dealDropOpen&&<div style={{position:"absolute",top:"100%",left:0,right:0,maxHeight:200,overflowY:"auto",background:T.card,border:`1px solid ${T.border}`,borderRadius:6,boxShadow:"0 4px 12px rgba(0,0,0,.1)",zIndex:50,marginTop:2}}>
+              {filteredDeals.length===0&&<div style={{padding:10,fontSize:11,color:T.muted,textAlign:"center"}}>該当なし</div>}
+              {filteredDeals.map(d=><div key={d.id} onClick={()=>{setSelectedDeal(d);setDealDropOpen(false);setDealSearch("")}} style={{padding:"8px 12px",fontSize:11,cursor:"pointer",background:selectedDeal?.id===d.id?T.primary+"15":"transparent",borderBottom:`1px solid ${T.borderLight||"#f0f0f0"}`}} onMouseEnter={e=>e.currentTarget.style.background=T.primary+"10"} onMouseLeave={e=>e.currentTarget.style.background=selectedDeal?.id===d.id?T.primary+"15":"transparent"}>{d.opportunity_name}{d.account_name?` (${d.account_name})`:""}</div>)}
+            </div>}
           </div>
 
           <div style={{gridColumn:IS_MOBILE?"auto":"span 2",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
