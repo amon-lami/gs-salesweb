@@ -3134,6 +3134,18 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
   const[showInvoiceModal,setShowInvoiceModal]=useState(false);
   const[deleteConfirm,setDeleteConfirm]=useState(false);
   const[confirmFileDeleteId,setConfirmFileDeleteId]=useState(null);
+  const[orderItems,setOrderItems]=useState([]);
+  const[orderStatuses,setOrderStatuses]=useState([]);
+
+  useEffect(()=>{
+    (async()=>{
+      const[{data:oi},{data:os}]=await Promise.all([
+        client.from("order_items").select("*").eq("deal_id",deal.id).order("created_at"),
+        client.from("order_statuses").select("*").order("sort_order")
+      ]);
+      setOrderItems(oi||[]);setOrderStatuses(os||[]);
+    })();
+  },[deal.id]);
 
   useEffect(()=>{loadFiles()},[deal.id]);
   const loadFiles=async()=>{const{data}=await client.from("sales_deal_files").select("*").eq("deal_id",deal.id).is("deleted_at",null).order("created_at",{ascending:false});if(data)setFiles(data)};
@@ -3308,6 +3320,32 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
             </div>))}
             {dealContacts.length===0&&<div style={{fontSize:11,color:"#ccc"}}>コンタクトなし</div>}
           </div>
+
+          {/* Order Items Section */}
+          {orderItems.length>0&&(
+            <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginTop:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>発注品目 ({orderItems.length})</span>
+                <span style={{fontSize:10,color:T.muted,fontWeight:400}}>¥{orderItems.reduce((s,it)=>s+Math.round((it.cost_price||0)*1.1*it.quantity),0).toLocaleString()}</span>
+              </div>
+              {orderItems.map(it=>{
+                const st=orderStatuses.find(s=>s.id===it.status);
+                return React.createElement("div",{key:it.id,style:{display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:`1px solid ${T.borderLight}`,fontSize:11}},
+                  React.createElement("div",{style:{flex:1,minWidth:0}},
+                    React.createElement("div",{style:{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontSize:10.5}},it.name_en||it.name_ja),
+                    React.createElement("div",{style:{fontSize:9,color:T.muted}},it.quantity+"pcs · "+(it.supplier||""))
+                  ),
+                  React.createElement("select",{value:it.status,onChange:async(e)=>{
+                    const ns=e.target.value;
+                    await client.from("order_items").update({status:ns}).eq("id",it.id);
+                    setOrderItems(prev=>prev.map(x=>x.id===it.id?{...x,status:ns}:x));
+                  },style:{padding:"1px 4px",border:"none",borderRadius:4,fontSize:9,fontWeight:600,fontFamily:"inherit",cursor:"pointer",background:st?st.color+"25":"#eee",color:st?st.color:T.sub}},
+                    orderStatuses.map(s=>React.createElement("option",{key:s.id,value:s.id},s.label))
+                  )
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Center: Timeline */}
@@ -4700,8 +4738,33 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
         notes,
       };
 
-      const{error}=await client.from("generated_documents").insert([docData]);
+      const{data:docResult,error}=await client.from("generated_documents").insert([docData]).select("id");
       if(error)throw error;
+      const savedDocId=docResult?.[0]?.id||null;
+
+      // Auto-create order items if linked to a deal
+      if(selectedDeal&&docItems.length>0){
+        try{
+          const orderItems=docItems.map(item=>({
+            deal_id:selectedDeal.id,
+            document_id:savedDocId,
+            account_id:selectedAccount?.id||selectedDeal.account_id||null,
+            product_id:item.product_id||null,
+            jan:item.jan||null,
+            name_en:item.name_en||"",
+            name_ja:item.name_ja||"",
+            quantity:item.quantity||0,
+            case_quantity:item.case_quantity||null,
+            cost_price:item.cost_price||null,
+            selling_price:item.selling_price||null,
+            weight_g:item.weight_g||null,
+            supplier:item.supplier||null,
+            status:"ordered",
+            created_by:user?.id||null,
+          }));
+          await client.from("order_items").insert(orderItems);
+        }catch(orderErr){console.error("Order items creation failed:",orderErr)}
+      }
 
       setSaveErr("");
       // Auto-download Excel + attach to deal if linked
@@ -5378,6 +5441,212 @@ function QuotationInvoiceBuilder({mode,client,user,accounts,contacts,deals,onBac
       )}
     </div>
   );
+}
+
+
+// ── Order Management Page (発注管理) ──
+function OrderManagementPage({client,user,accounts,deals}){
+const IS_MOBILE=window.innerWidth<768;
+const[items,setItems]=useState([]);
+const[statuses,setStatuses]=useState([]);
+const[loading,setLoading]=useState(true);
+const[filterStatus,setFilterStatus]=useState("all");
+const[filterSupplier,setFilterSupplier]=useState("all");
+const[filterAccount,setFilterAccount]=useState("all");
+const[searchText,setSearchText]=useState("");
+const[showStatusEditor,setShowStatusEditor]=useState(false);
+const[newStatusLabel,setNewStatusLabel]=useState("");
+const[newStatusColor,setNewStatusColor]=useState("#999999");
+
+const STATUS_COLORS={ordered:"#22c55e",paid:"#a855f7",sg_arrived:"#ec4899",gs_arrived:"#f59e0b",shipping:"#3b82f6",delivered:"#14b8a6"};
+
+const loadData=useCallback(async()=>{
+  if(!client)return;
+  const[{data:orderData},{data:statusData}]=await Promise.all([
+    client.from("order_items").select("*").order("created_at",{ascending:false}),
+    client.from("order_statuses").select("*").order("sort_order")
+  ]);
+  setItems(orderData||[]);
+  setStatuses(statusData||[]);
+  setLoading(false);
+},[client]);
+
+useEffect(()=>{loadData()},[loadData]);
+
+const updateField=async(id,field,value)=>{
+  const update={[field]:value};
+  await client.from("order_items").update(update).eq("id",id);
+  setItems(prev=>prev.map(it=>it.id===id?{...it,[field]:value}:it));
+};
+
+const addCustomStatus=async()=>{
+  if(!newStatusLabel.trim())return;
+  const id=newStatusLabel.trim().toLowerCase().replace(/[^a-z0-9]/g,"_");
+  const maxSort=statuses.reduce((m,s)=>Math.max(m,s.sort_order),0);
+  const{error}=await client.from("order_statuses").insert([{id,label:newStatusLabel.trim(),color:newStatusColor,sort_order:maxSort+1,created_by:user?.id}]);
+  if(!error){
+    setStatuses(prev=>[...prev,{id,label:newStatusLabel.trim(),color:newStatusColor,sort_order:maxSort+1}]);
+    setNewStatusLabel("");setNewStatusColor("#999999");
+  }
+};
+
+const deleteItem=async(id)=>{
+  await client.from("order_items").delete().eq("id",id);
+  setItems(prev=>prev.filter(it=>it.id!==id));
+};
+
+const statusMap=useMemo(()=>{
+  const m={};statuses.forEach(s=>{m[s.id]=s});return m;
+},[statuses]);
+
+const suppliers=useMemo(()=>[...new Set(items.map(i=>i.supplier).filter(Boolean))].sort(),[items]);
+const accountIds=useMemo(()=>[...new Set(items.map(i=>i.account_id).filter(Boolean))],[items]);
+const accountMap=useMemo(()=>{const m={};(accounts||[]).forEach(a=>{m[a.id]=a.name});return m},[accounts]);
+
+const filtered=useMemo(()=>{
+  let f=items;
+  if(filterStatus!=="all")f=f.filter(i=>i.status===filterStatus);
+  if(filterSupplier!=="all")f=f.filter(i=>i.supplier===filterSupplier);
+  if(filterAccount!=="all")f=f.filter(i=>i.account_id===filterAccount);
+  if(searchText.trim()){
+    const q=searchText.toLowerCase();
+    f=f.filter(i=>(i.name_en||"").toLowerCase().includes(q)||(i.jan||"").includes(q)||(i.notes||"").toLowerCase().includes(q));
+  }
+  return f;
+},[items,filterStatus,filterSupplier,filterAccount,searchText]);
+
+const statusCounts=useMemo(()=>{
+  const c={};statuses.forEach(s=>{c[s.id]=0});
+  items.forEach(i=>{if(c[i.status]!==undefined)c[i.status]++;});
+  return c;
+},[items,statuses]);
+
+const totalCost=useMemo(()=>filtered.reduce((s,i)=>{
+  const cp=i.cost_price||0;return s+Math.round(cp*1.1*i.quantity);
+},0),[filtered]);
+
+if(loading)return React.createElement("div",{style:{padding:40,textAlign:"center",color:T.muted}},"読み込み中...");
+
+return React.createElement("div",{style:{maxWidth:1400,margin:"0 auto",padding:IS_MOBILE?12:20}},
+  // Header
+  React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
+    React.createElement("h2",{style:{fontSize:18,fontWeight:700,color:T.primary,margin:0}},"発注管理"),
+    React.createElement("button",{onClick:()=>setShowStatusEditor(!showStatusEditor),style:{padding:"6px 12px",background:showStatusEditor?T.primary:"#fff",color:showStatusEditor?"#fff":T.sub,border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontWeight:600,cursor:"pointer"}},showStatusEditor?"閉じる":"ステータス設定")
+  ),
+
+  // Status Editor
+  showStatusEditor&&React.createElement("div",{style:{padding:12,background:T.card,borderRadius:8,border:`1px solid ${T.border}`,marginBottom:12}},
+    React.createElement("div",{style:{fontSize:11,fontWeight:700,color:T.primary,marginBottom:8}},"ステータス管理"),
+    React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
+      statuses.map(s=>React.createElement("span",{key:s.id,style:{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:s.color+"20",color:s.color,fontSize:10,fontWeight:600,border:`1px solid ${s.color}40`}},
+        React.createElement("span",{style:{width:8,height:8,borderRadius:"50%",background:s.color}}),
+        s.label
+      ))
+    ),
+    React.createElement("div",{style:{display:"flex",gap:8,alignItems:"center"}},
+      React.createElement("input",{value:newStatusLabel,onChange:e=>setNewStatusLabel(e.target.value),placeholder:"新しいステータス名",style:{padding:"5px 8px",border:`1px solid ${T.border}`,borderRadius:4,fontSize:11,fontFamily:"inherit",flex:1}}),
+      React.createElement("input",{type:"color",value:newStatusColor,onChange:e=>setNewStatusColor(e.target.value),style:{width:30,height:26,border:"none",cursor:"pointer"}}),
+      React.createElement("button",{onClick:addCustomStatus,style:{padding:"5px 10px",background:T.primary,color:"#fff",border:"none",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}},"追加")
+    )
+  ),
+
+  // Status Summary Cards
+  React.createElement("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},
+    React.createElement("button",{onClick:()=>setFilterStatus("all"),style:{padding:"6px 12px",borderRadius:20,border:filterStatus==="all"?`2px solid ${T.primary}`:`1px solid ${T.border}`,background:filterStatus==="all"?T.primary:"#fff",color:filterStatus==="all"?"#fff":T.sub,fontSize:10,fontWeight:600,cursor:"pointer"}},"全て ("+items.length+")"),
+    statuses.map(s=>React.createElement("button",{key:s.id,onClick:()=>setFilterStatus(filterStatus===s.id?"all":s.id),style:{padding:"6px 12px",borderRadius:20,border:filterStatus===s.id?`2px solid ${s.color}`:`1px solid ${T.border}`,background:filterStatus===s.id?s.color+"15":"#fff",color:filterStatus===s.id?s.color:T.sub,fontSize:10,fontWeight:600,cursor:"pointer"}},
+      React.createElement("span",{style:{display:"inline-block",width:6,height:6,borderRadius:"50%",background:s.color,marginRight:4}}),
+      s.label+" ("+(statusCounts[s.id]||0)+")"
+    ))
+  ),
+
+  // Filters
+  React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}},
+    React.createElement("input",{value:searchText,onChange:e=>setSearchText(e.target.value),placeholder:"商品名/JAN/備考で検索...",style:{flex:1,minWidth:150,padding:"6px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}}),
+    React.createElement("select",{value:filterSupplier,onChange:e=>setFilterSupplier(e.target.value),style:{padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}},
+      React.createElement("option",{value:"all"},"仕入先: 全て"),
+      suppliers.map(s=>React.createElement("option",{key:s,value:s},s))
+    ),
+    React.createElement("select",{value:filterAccount,onChange:e=>setFilterAccount(e.target.value),style:{padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit"}},
+      React.createElement("option",{value:"all"},"案件: 全て"),
+      accountIds.map(id=>React.createElement("option",{key:id,value:id},accountMap[id]||id))
+    )
+  ),
+
+  // Totals bar
+  React.createElement("div",{style:{padding:8,background:"#1a365d",borderRadius:6,color:"#fff",fontSize:11,fontWeight:600,display:"flex",gap:16,flexWrap:"wrap",marginBottom:8}},
+    React.createElement("span",null,"表示: "+filtered.length+"件"),
+    React.createElement("span",null,"総仕入れ額: ¥"+totalCost.toLocaleString()),
+    React.createElement("span",null,"総数量: "+filtered.reduce((s,i)=>s+i.quantity,0)+"pcs")
+  ),
+
+  // Table
+  React.createElement("div",{style:{overflowX:"auto"}},
+    React.createElement("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:11,minWidth:1100}},
+      React.createElement("thead",null,
+        React.createElement("tr",{style:{background:"#1a365d",color:"#fff"}},
+          ["入金日","進捗共有","商品名","JAN","発注数","入数","発注ケース","案件","仕入先","ステータス","備考","下代(税抜)","下代(税込)","総仕入れ額",""].map(h=>
+            React.createElement("th",{key:h,style:{padding:"5px 6px",textAlign:["下代(税抜)","下代(税込)","総仕入れ額"].includes(h)?"right":"left",fontWeight:600,fontSize:9,whiteSpace:"nowrap"}},h)
+          )
+        )
+      ),
+      React.createElement("tbody",null,
+        filtered.map((item,i)=>{
+          const st=statusMap[item.status];
+          const bg=i%2===0?"#f8fafc":"#fff";
+          const costIncl=item.cost_price?Math.round(item.cost_price*1.1):0;
+          const total=costIncl*item.quantity;
+          return React.createElement("tr",{key:item.id,style:{background:bg,borderBottom:"1px solid #e2e8f0"}},
+            // 入金日
+            React.createElement("td",{style:{padding:"3px 4px"}},
+              React.createElement("input",{type:"date",value:item.payment_date||"",onChange:e=>updateField(item.id,"payment_date",e.target.value||null),style:{border:`1px solid ${T.border}`,borderRadius:3,fontSize:10,padding:"2px 4px",width:100,fontFamily:"inherit"}})
+            ),
+            // 進捗共有
+            React.createElement("td",{style:{padding:"3px 4px"}},
+              React.createElement("input",{type:"date",value:item.progress_shared_date||"",onChange:e=>updateField(item.id,"progress_shared_date",e.target.value||null),style:{border:`1px solid ${T.border}`,borderRadius:3,fontSize:10,padding:"2px 4px",width:100,fontFamily:"inherit"}})
+            ),
+            // 商品名
+            React.createElement("td",{style:{padding:"4px 6px",maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},title:item.name_en||item.name_ja},item.name_en||item.name_ja),
+            // JAN
+            React.createElement("td",{style:{padding:"4px 4px",fontSize:10,color:T.muted,whiteSpace:"nowrap"}},item.jan),
+            // 発注数
+            React.createElement("td",{style:{padding:"4px 4px",textAlign:"center",fontSize:10}},item.quantity+"pcs"),
+            // 入数
+            React.createElement("td",{style:{padding:"4px 4px",textAlign:"center",fontSize:10}},item.case_quantity?item.case_quantity+"pcs":"-"),
+            // 発注ケース
+            React.createElement("td",{style:{padding:"4px 4px",textAlign:"center",fontSize:10}},item.case_quantity&&item.case_quantity>0?(item.quantity/item.case_quantity).toFixed(1)+"ケース":"-"),
+            // 案件
+            React.createElement("td",{style:{padding:"4px 4px",fontSize:10}},
+              React.createElement("span",{style:{padding:"1px 6px",borderRadius:4,background:T.accent+"15",color:T.accent,fontWeight:600,fontSize:9}},accountMap[item.account_id]||"-")
+            ),
+            // 仕入先
+            React.createElement("td",{style:{padding:"4px 4px",fontSize:10,fontWeight:600,color:T.sub}},item.supplier||"-"),
+            // ステータス
+            React.createElement("td",{style:{padding:"3px 4px"}},
+              React.createElement("select",{value:item.status,onChange:e=>updateField(item.id,"status",e.target.value),style:{padding:"2px 4px",border:"none",borderRadius:4,fontSize:10,fontWeight:600,fontFamily:"inherit",cursor:"pointer",background:st?st.color+"25":"#eee",color:st?st.color:T.sub}},
+                statuses.map(s=>React.createElement("option",{key:s.id,value:s.id},s.label))
+              )
+            ),
+            // 備考
+            React.createElement("td",{style:{padding:"3px 4px"}},
+              React.createElement("input",{value:item.notes||"",onChange:e=>updateField(item.id,"notes",e.target.value),placeholder:"...",style:{border:`1px solid ${T.borderLight}`,borderRadius:3,fontSize:10,padding:"2px 4px",width:120,fontFamily:"inherit"}})
+            ),
+            // 下代(税抜)
+            React.createElement("td",{style:{padding:"4px 6px",textAlign:"right",fontSize:10}},item.cost_price?"¥"+item.cost_price.toLocaleString():"-"),
+            // 下代(税込)
+            React.createElement("td",{style:{padding:"4px 6px",textAlign:"right",fontSize:10}},costIncl?"¥"+costIncl.toLocaleString():"-"),
+            // 総仕入れ額
+            React.createElement("td",{style:{padding:"4px 6px",textAlign:"right",fontSize:10,fontWeight:600}},total?"¥"+total.toLocaleString():"-"),
+            // 削除
+            React.createElement("td",{style:{padding:"3px 2px",textAlign:"center"}},
+              React.createElement("button",{onClick:()=>deleteItem(item.id),style:{background:"none",border:"none",fontSize:11,cursor:"pointer",color:"#dc2626",padding:0},title:"削除"},"✕")
+            )
+          );
+        }),
+        filtered.length===0&&React.createElement("tr",null,React.createElement("td",{colSpan:15,style:{padding:20,textAlign:"center",color:T.muted,fontSize:12}},"発注アイテムがありません"))
+      )
+    )
+  )
+);
 }
 
 
@@ -7439,6 +7708,7 @@ function App(){
               {id:"todos",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M5 8l2 2 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>,label:"ToDo",badge:todoUnread},
               {id:"expenses",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 6h12M6 6v8M10 6v8" strokeWidth="1.1" stroke="currentColor"/></svg>,label:"経費"},
               {id:"documents",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 2h7l3 3v9a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.3"/><path d="M10 2v3h3" stroke="currentColor" strokeWidth="1.2"/><path d="M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>,label:"書類"},
+              {id:"orders",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 4h12v9a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke="currentColor" strokeWidth="1.3"/><path d="M2 4l2-2h8l2 2" stroke="currentColor" strokeWidth="1.2"/><path d="M6 7h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,label:"発注管理"},
               {id:"chat",icon:<svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 3a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H5l-3 3V3z" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,label:"チャット",badge:chatUnread}
             ].map(nav=>(<button key={nav.id} onClick={()=>{navigatePage(nav.id);if(nav.id==="chat")setChatUnread(0)}} style={{width:44,padding:"6px 0",borderRadius:6,border:"none",background:page===nav.id?T.primary:"transparent",color:page===nav.id?"#fff":T.muted,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,fontSize:8.5,fontWeight:600,fontFamily:"inherit",position:"relative"}}
               onMouseEnter={e=>{if(page!==nav.id)e.currentTarget.style.background=T.hover}} onMouseLeave={e=>{if(page!==nav.id)e.currentTarget.style.background="transparent"}}>
@@ -7466,6 +7736,8 @@ function App(){
           {page==="expenses"&&<ExpensePage client={client} user={user} allUsers={allUsers} accounts={accounts}/>}
           {page==="todos"&&<TodoOverviewPage deals={deals} accounts={accounts} client={client} user={user} allUsers={allUsers} onOpenDeal={d=>openDealDetail(d)}/>}
           {page==="documents"&&<DocumentsPage client={client} user={user} allUsers={allUsers} accounts={accounts} contacts={contacts} deals={deals}/>}
+
+          {page==="orders"&&<OrderManagementPage client={client} user={user} accounts={accounts} deals={deals}/>}
 
           {page==="deals"&&(<>
             {/* Toolbar — unified filter bar */}
