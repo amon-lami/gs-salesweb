@@ -3132,15 +3132,15 @@ function getNextAction(deal,dealDocs,orderItems){
   const allArrived=orderItems.length>0&&orderItems.every(it=>["gs_arrived","sg_arrived","ub_arrived","delivered","packed","shipped"].includes(it.status));
   const allShipped=orderItems.length>0&&orderItems.every(it=>["shipped","delivered"].includes(it.status));
   const allHaveTracking=orderItems.length>0&&orderItems.every(it=>it.tracking_number);
-  if(stage==="negotiation"&&!hasQuote)return{msg:"見積書を作成しましょう",icon:"📝",action:"quote",color:"#3b82f6"};
-  if(stage==="negotiation"&&hasQuote&&!hasInvoice)return{msg:"請求書を作成して送付しましょう",icon:"📨",action:"invoice",color:"#2d8cf0"};
-  if(stage==="invoice_sent"&&(deal.prepayment_percent||0)<100)return{msg:"入金を確認してください",icon:"💰",action:"payment",color:"#f59e0b"};
-  if(stage==="order_pending"&&orderItems.length===0)return{msg:"書類から発注に反映してください",icon:"📦",action:"docs",color:"#8b5cf6"};
-  if(stage==="order_pending"&&orderItems.length>0&&!allItemsOrdered)return{msg:"仕入先に発注しましょう",icon:"🛒",color:"#22c55e"};
-  if(stage==="order_completed"&&!allArrived)return{msg:"入荷を待っています",icon:"🚚",color:"#f59e0b"};
-  if(stage==="goods_received"&&!hasDelivery)return{msg:"納品書を作成して発送しましょう",icon:"📋",action:"delivery",color:"#06b6d4"};
-  if(stage==="shipped"&&!allHaveTracking)return{msg:"追跡番号を入力してください",icon:"🔍",action:"tracking",color:"#ec4899"};
-  if(phase==="done")return{msg:"この商談は完了しています",icon:"✅",color:T.green};
+  if(stage==="negotiation"&&!hasQuote)return{msg:"見積書を作成しましょう",action:"quote",color:"#3b82f6"};
+  if(stage==="negotiation"&&hasQuote&&!hasInvoice)return{msg:"請求書を作成して送付しましょう",action:"invoice",color:"#2d8cf0"};
+  if(stage==="invoice_sent"&&(deal.prepayment_percent||0)<100)return{msg:"入金を確認してください",action:"payment",color:"#f59e0b"};
+  if(stage==="order_pending"&&orderItems.length===0)return{msg:"書類から発注に反映してください",action:"docs",color:"#8b5cf6"};
+  if(stage==="order_pending"&&orderItems.length>0&&!allItemsOrdered)return{msg:"仕入先に発注しましょう",color:"#22c55e"};
+  if(stage==="order_completed"&&!allArrived)return{msg:"入荷を待っています",color:"#f59e0b"};
+  if(stage==="goods_received"&&!hasDelivery)return{msg:"納品書を作成して発送しましょう",action:"delivery",color:"#06b6d4"};
+  if(stage==="shipped"&&!allHaveTracking)return{msg:"追跡番号を入力してください",action:"tracking",color:"#ec4899"};
+  if(phase==="done")return{msg:"この商談は完了しています",color:T.green};
   return null;
 }
 
@@ -3301,7 +3301,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
         if(!na)return null;
         return(
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:na.color+"10",border:`1px solid ${na.color}30`,borderRadius:8,marginBottom:12}}>
-            <span style={{fontSize:18}}>{na.icon}</span>
+            <div style={{width:8,height:8,borderRadius:"50%",background:na.color,flexShrink:0}}/>
             <span style={{flex:1,fontSize:12,fontWeight:600,color:na.color}}>{na.msg}</span>
             {na.action==="quote"&&onNavigateToDocBuilder&&<button onClick={()=>onNavigateToDocBuilder("quotation",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"4px 12px",borderRadius:6,border:`1px solid ${na.color}`,background:na.color,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>見積書作成</button>}
             {na.action==="invoice"&&onNavigateToDocBuilder&&<button onClick={()=>onNavigateToDocBuilder("invoice",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"4px 12px",borderRadius:6,border:`1px solid ${na.color}`,background:na.color,color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>請求書作成</button>}
@@ -3313,7 +3313,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
       {/* Stage Toast for auto-progression */}
       {stageToast&&(
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:"#22c55e10",border:"1px solid #22c55e30",borderRadius:8,marginBottom:12}}>
-          <span style={{fontSize:14}}>🎯</span>
+          <div style={{width:8,height:8,borderRadius:"50%",background:"#22c55e",flexShrink:0}}/>
           <span style={{flex:1,fontSize:12,fontWeight:600,color:"#22c55e"}}>{stageToast.msg}</span>
           <button onClick={()=>{moveSta(stageToast.target);setStageToast(null)}} style={{padding:"4px 12px",borderRadius:6,border:"1px solid #22c55e",background:"#22c55e",color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>進める</button>
           <button onClick={()=>setStageToast(null)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${T.border}`,background:"#fff",color:T.sub,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
@@ -3384,7 +3384,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
           {/* Documents Section */}
           <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>📄 書類 ({dealDocs.length})</span>
+              <span>書類 ({dealDocs.length})</span>
               {onNavigateToDocBuilder&&<div style={{display:"flex",gap:4}}>
                 <button onClick={()=>onNavigateToDocBuilder("quotation",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.primary}30`,background:T.primary+"10",color:T.primary,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+見積</button>
                 <button onClick={()=>onNavigateToDocBuilder("invoice",{deal_id:deal.id,account_id:deal.account_id})} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent}30`,background:T.accent+"10",color:T.accent,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>+請求</button>
@@ -3410,9 +3410,9 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
           </div>
 
           {/* Order Items Section - Enhanced */}
-          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginTop:0}}>
+          <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>📦 発注品目 ({orderItems.length})</span>
+              <span>発注品目 ({orderItems.length})</span>
               <span style={{fontSize:10,color:T.muted,fontWeight:400}}>¥{orderItems.reduce((s,it)=>s+Math.round((it.cost_price||0)*1.1*it.quantity),0).toLocaleString()}</span>
             </div>
             {orderItems.length===0?<div style={{fontSize:11,color:T.muted,textAlign:"center",padding:"8px 0"}}>発注品目がまだありません</div>:
@@ -3486,7 +3486,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
             return(
               <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
                 <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span>💰 入金状況</span>
+                  <span>入金状況</span>
                   <button onClick={()=>setShowPaymentForm(!showPaymentForm)} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent}30`,background:T.accent+"10",color:T.accent,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{showPaymentForm?"✕":"+ 入金記録"}</button>
                 </div>
                 {/* Payment form */}
@@ -3566,7 +3566,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
           {/* Shipments Section (出荷) */}
           <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
             <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>🚚 出荷 ({shipments.length})</span>
+              <span>出荷 ({shipments.length})</span>
               <button onClick={()=>setShowShipmentForm(!showShipmentForm)} style={{padding:"2px 8px",borderRadius:4,border:`1px solid ${T.accent}30`,background:T.accent+"10",color:T.accent,fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{showShipmentForm?"✕":"+ 出荷を作成"}</button>
             </div>
             {/* Shipment creation form */}
@@ -3662,7 +3662,7 @@ function DealDetail({deal,accounts,contacts,client,user,allUsers,onBack,onUpdate
           {(stageObj?.phase==="post"||stageObj?.phase==="done"||creditNotes.length>0)&&(
             <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:700,color:T.primary,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span>📋 クレジットノート ({creditNotes.length})</span>
+                <span>クレジットノート ({creditNotes.length})</span>
                 <button onClick={()=>setShowCreditForm(!showCreditForm)} style={{padding:"2px 8px",borderRadius:4,border:"1px solid #ef444430",background:"#ef444410",color:"#ef4444",fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>{showCreditForm?"✕":"+ 作成"}</button>
               </div>
               {showCreditForm&&(()=>{
