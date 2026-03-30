@@ -566,7 +566,7 @@ function WeeklyReportPage({deals,accounts,client,user,allUsers,onOpenDeal}){
       const deal=deals.find(d=>d.id===dealId);
       await client.from("sales_activities").insert({
         deal_id:dealId,account_id:deal?.account_id,user_id:user.id,
-        type:"weekly_report",subject:"週次レポートを提出しました",content:text
+        type:"weekly_report",content:text
       });
       // Auto-post to GS-Chat
       if(deal?.chat_room_id){
