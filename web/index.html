@@ -7448,6 +7448,7 @@ function TodoOverviewPage({deals,accounts,client,user,allUsers,onOpenDeal}){
   };
   const[editingMemoId,setEditingMemoId]=useState(null);
   const[memoText,setMemoText]=useState("");
+  const[showCompleted,setShowCompleted]=useState(false);
   const saveMemo=async(id)=>{
     const todo=todos.find(t=>t.id===id);
     const meta={...(todo?.metadata||{}),completion_note:memoText.trim()};
@@ -7524,25 +7525,27 @@ function TodoOverviewPage({deals,accounts,client,user,allUsers,onOpenDeal}){
           {t.due_date&&<span style={{fontSize:10,fontWeight:600,color:isOverdue?T.red:daysLeft!==null&&daysLeft<=3?T.orange:T.muted,whiteSpace:"nowrap"}}>{t.due_date.slice(5).replace("-","/")}{isOverdue?" ⚠":""}</span>}
           {showDelete&&<button onClick={e=>{e.stopPropagation();setDeleteConfirmTodo(t)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:T.muted,padding:"2px 4px",borderRadius:4,flexShrink:0}} onMouseEnter={e=>{e.currentTarget.style.color=T.red}} onMouseLeave={e=>{e.currentTarget.style.color=T.muted}} title="削除">✕</button>}
         </div>
-        {/* Completion memo area - only for completed todos */}
-        {t.is_completed&&(
+        {/* Memo area - available for all todos */}
+        {(isEditingMemo||memo)?(
           <div style={{padding:"0 12px 6px 38px"}}>
             {isEditingMemo?(
               <div style={{display:"flex",gap:4,alignItems:"flex-start"}}>
-                <textarea value={memoText} onChange={e=>setMemoText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();saveMemo(t.id)}if(e.key==="Escape"){setEditingMemoId(null);setMemoText("")}}} autoFocus placeholder="対応内容を記入..." rows={2} style={{flex:1,padding:"4px 8px",border:`1px solid ${T.accent}`,borderRadius:5,fontSize:10,fontFamily:"inherit",outline:"none",resize:"vertical",lineHeight:1.5}}/>
+                <textarea value={memoText} onChange={e=>setMemoText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();saveMemo(t.id)}if(e.key==="Escape"){setEditingMemoId(null);setMemoText("")}}} autoFocus placeholder="メモを記入..." rows={2} style={{flex:1,padding:"4px 8px",border:`1px solid ${T.accent}`,borderRadius:5,fontSize:10,fontFamily:"inherit",outline:"none",resize:"vertical",lineHeight:1.5}}/>
                 <button onClick={()=>saveMemo(t.id)} style={{padding:"4px 10px",borderRadius:4,border:"none",background:T.accent,color:"#fff",fontSize:9,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>保存</button>
                 <button onClick={()=>{setEditingMemoId(null);setMemoText("")}} style={{padding:"4px 6px",borderRadius:4,border:`1px solid ${T.border}`,background:"#fff",color:T.sub,fontSize:9,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
               </div>
-            ):memo?(
+            ):(
               <div style={{display:"flex",alignItems:"flex-start",gap:4}}>
                 <div style={{flex:1,fontSize:10,color:T.sub,background:"#f5f5f5",padding:"3px 8px",borderRadius:4,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
                   <span style={{color:T.muted,fontWeight:600,marginRight:4}}>メモ:</span>{memo}
                 </div>
-                <button onClick={()=>{setEditingMemoId(t.id);setMemoText(memo)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:9,color:T.muted,padding:"2px",flexShrink:0}} title="メモを編集">✏️</button>
+                <button onClick={()=>{setEditingMemoId(t.id);setMemoText(memo)}} style={{background:"none",border:"none",cursor:"pointer",fontSize:9,color:T.muted,padding:"2px",flexShrink:0}} title="メモを編集">編集</button>
               </div>
-            ):(
-              <button onClick={()=>{setEditingMemoId(t.id);setMemoText("")}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:T.accent,padding:0,fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>+ メモを追加</button>
             )}
+          </div>
+        ):(
+          <div style={{padding:"0 12px 4px 38px"}}>
+            <button onClick={()=>{setEditingMemoId(t.id);setMemoText("")}} style={{background:"none",border:"none",cursor:"pointer",fontSize:10,color:T.muted,padding:0,fontFamily:"inherit"}} onMouseEnter={e=>{e.currentTarget.style.color=T.accent;e.currentTarget.style.textDecoration="underline"}} onMouseLeave={e=>{e.currentTarget.style.color=T.muted;e.currentTarget.style.textDecoration="none"}}>+ メモ</button>
           </div>
         )}
       </div>
@@ -7603,9 +7606,16 @@ function TodoOverviewPage({deals,accounts,client,user,allUsers,onOpenDeal}){
           )):filteredUpcoming.map(renderTodoRow)}
         </>}
         {filteredCompleted.length>0&&<>
-          <SectionHeader title="完了済み" count={filteredCompleted.length} color={T.green}/>
-          {filteredCompleted.slice(0,20).map(t=>renderTodoRow(t,true))}
-          {filteredCompleted.length>20&&<div style={{padding:"8px 12px",fontSize:11,color:T.muted,textAlign:"center"}}>他 {filteredCompleted.length-20}件...</div>}
+          <div onClick={()=>setShowCompleted(v=>!v)} style={{padding:"10px 12px 6px",display:"flex",alignItems:"center",gap:6,cursor:"pointer",userSelect:"none"}}>
+            <span style={{fontSize:10,color:T.muted,transition:"transform 0.2s",transform:showCompleted?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+            <div style={{width:8,height:8,borderRadius:"50%",background:T.green}}/>
+            <span style={{fontSize:12,fontWeight:700,color:T.primary}}>完了済み</span>
+            <span style={{fontSize:10,color:T.muted}}>({filteredCompleted.length})</span>
+          </div>
+          {showCompleted&&<>
+            {filteredCompleted.slice(0,20).map(t=>renderTodoRow(t,true))}
+            {filteredCompleted.length>20&&<div style={{padding:"8px 12px",fontSize:11,color:T.muted,textAlign:"center"}}>他 {filteredCompleted.length-20}件...</div>}
+          </>}
         </>}
         {filteredOverdue.length===0&&filteredUpcoming.length===0&&filteredCompleted.length===0&&(
           <div style={{padding:40,textAlign:"center",color:T.muted,fontSize:12}}>ToDoがありません</div>
