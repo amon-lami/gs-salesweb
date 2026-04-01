@@ -5,9 +5,7 @@ node_modules/
 dist/
 *.timestamp-*.mjs
 
-# Environment / Secrets
-.env
-.env.*
+# Environment / Secrets (service_role等の機密キーは .env.local に入れること)
 .env.local
 .env*.local
 
@@ -25,4 +23,3 @@ Salesforce cvs/
 *.bak
 *.bak2
 *.bak3
-.env
