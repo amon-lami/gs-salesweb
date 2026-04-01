@@ -6,6 +6,9 @@ dist/
 *.timestamp-*.mjs
 
 # Environment / Secrets (service_role等の機密キーは .env.local に入れること)
+.env
+.env.*
+!.env.example
 .env.local
 .env*.local
 

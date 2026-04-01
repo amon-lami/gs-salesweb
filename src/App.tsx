@@ -67,6 +67,16 @@ export default function App() {
     await reloadAll();
   }, [user, convertToAccount, reloadAll]);
 
+  // 初期化エラー（.envの設定ミスなど）— ローディングより先にチェック
+  if (initError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, fontFamily: 'Noto Sans JP, sans-serif' }}>
+        <span style={{ fontSize: 13, color: T.red }}>{initError}</span>
+        <span style={{ fontSize: 11, color: '#999' }}>.env ファイルに VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY が設定されているか確認してください</span>
+      </div>
+    );
+  }
+
   // ローディング
   if (status === 'loading' || !client) {
     return (
@@ -76,11 +86,11 @@ export default function App() {
     );
   }
 
-  // エラー
-  if (status === 'error' || initError) {
+  // 認証エラー
+  if (status === 'error') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 12, fontFamily: 'Noto Sans JP, sans-serif' }}>
-        <span style={{ fontSize: 13, color: T.red }}>{authError || initError}</span>
+        <span style={{ fontSize: 13, color: T.red }}>{authError}</span>
       </div>
     );
   }
