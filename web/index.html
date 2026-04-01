@@ -7042,8 +7042,10 @@ const[searchTerm,setSearchTerm]=useState("");
 const[debouncedSearch,setDebouncedSearch]=useState("");
 const[filterBrand,setFilterBrand]=useState("");
 const[filterStatus,setFilterStatus]=useState("");
-const[currentPage,setCurrentPage]=useState(0);
 const[totalCount,setTotalCount]=useState(0);
+const[hasMore,setHasMore]=useState(true);
+const[loadingMore,setLoadingMore]=useState(false);
+const scrollRef=useRef(null);
 const[editProduct,setEditProduct]=useState(null);
 const[origProduct,setOrigProduct]=useState(null);
 const[showEdit,setShowEdit]=useState(false);
@@ -7059,21 +7061,32 @@ const[csvImporting,setCsvImporting]=useState(false);
 const LIMIT=50;
 const searchTimer=useRef(null);
 
-useEffect(()=>{clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>{setDebouncedSearch(searchTerm);setCurrentPage(0)},300);return()=>clearTimeout(searchTimer.current)},[searchTerm]);
+useEffect(()=>{clearTimeout(searchTimer.current);searchTimer.current=setTimeout(()=>{setDebouncedSearch(searchTerm)},300);return()=>clearTimeout(searchTimer.current)},[searchTerm]);
 
-const fetchProducts=useCallback(async()=>{
-  if(!client)return;setLoading(true);setError("");
+const fetchProducts=useCallback(async(append=false)=>{
+  if(!client)return;
+  if(!append){setLoading(true);setError("");}else{setLoadingMore(true);}
   try{
+    const offset=append?products.length:0;
     let q=client.from("product_master").select("*",{count:"exact"});
     if(debouncedSearch){const s=`%${debouncedSearch}%`;q=q.or(`name_ja.ilike.${s},name_en.ilike.${s},jan.ilike.${s},brand.ilike.${s}`);}
     if(filterBrand)q=q.eq("brand",filterBrand);
     if(filterStatus)q=q.eq("status",filterStatus);
-    const{data,count,error:e}=await q.order("updated_at",{ascending:false}).range(currentPage*LIMIT,(currentPage+1)*LIMIT-1);
-    if(e)throw e;setProducts(data||[]);setTotalCount(count||0);
-  }catch(e){setError(e.message);setProducts([])}finally{setLoading(false)}
-},[client,debouncedSearch,filterBrand,filterStatus,currentPage]);
+    const{data,count,error:e}=await q.order("updated_at",{ascending:false}).range(offset,offset+LIMIT-1);
+    if(e)throw e;
+    if(append){setProducts(prev=>[...prev,...(data||[])])}else{setProducts(data||[])}
+    setTotalCount(count||0);setHasMore((data||[]).length>=LIMIT);
+  }catch(e){setError(e.message);if(!append)setProducts([])}finally{setLoading(false);setLoadingMore(false)}
+},[client,debouncedSearch,filterBrand,filterStatus,products.length]);
 
-useEffect(()=>{if(docPage==="master")fetchProducts()},[fetchProducts,docPage]);
+useEffect(()=>{if(docPage==="master"){setProducts([]);setHasMore(true);fetchProducts(false)}},[debouncedSearch,filterBrand,filterStatus,docPage]);
+
+useEffect(()=>{
+  if(docPage!=="master"||!scrollRef.current)return;
+  const el=scrollRef.current;
+  const onScroll=()=>{if(el.scrollTop+el.clientHeight>=el.scrollHeight-200&&hasMore&&!loadingMore&&!loading){fetchProducts(true)}};
+  el.addEventListener("scroll",onScroll);return()=>el.removeEventListener("scroll",onScroll);
+},[docPage,hasMore,loadingMore,loading,fetchProducts]);
 
 useEffect(()=>{
   if(!client||docPage!=="master")return;
@@ -7141,7 +7154,6 @@ const importCsv=async()=>{
 };
 
 const topBrands=useMemo(()=>{const counts={};products.forEach(p=>{if(p.brand)counts[p.brand]=(counts[p.brand]||0)+1});return brands.slice(0,6)},[brands,products]);
-const startIdx=currentPage*LIMIT;const endIdx=Math.min(startIdx+LIMIT,totalCount);
 const sn=(uid)=>{const u=(allUsers||[]).find(x=>x.id===uid);return u?u.display_name||u.email?.split("@")[0]||"不明":"不明"};
 
 // ── Menu ──
@@ -7207,7 +7219,7 @@ if(docPage==="master"){return(
       <button onClick={()=>openEdit(null)} style={{padding:"5px 12px",background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ 新規追加</button>
     </div>
   </div>
-  <div style={{flex:1,overflowY:"auto",padding:IS_MOBILE?10:16}}>
+  <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:IS_MOBILE?10:16}}>
   {/* Search + Filters */}
   <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",padding:"10px 12px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}>
     <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="商品名 / JAN / ブランドで検索..." style={{flex:1,minWidth:150,padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",outline:"none",background:T.bg}}/>
@@ -7215,8 +7227,8 @@ if(docPage==="master"){return(
       <option value="">全ステータス</option><option value="active">アクティブ</option><option value="inactive">非アクティブ</option><option value="discontinued">廃盤</option>
     </select>
     <div style={{display:"flex",gap:4,alignItems:"center"}}>
-      <button onClick={()=>{setFilterBrand("");setCurrentPage(0)}} style={{padding:"4px 10px",background:!filterBrand?(T.accent||"#2d8cf0")+"12":"transparent",color:!filterBrand?T.accent||"#2d8cf0":T.muted,border:!filterBrand?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}}>全て</button>
-      {topBrands.map(b=><button key={b} onClick={()=>{setFilterBrand(filterBrand===b?"":b);setCurrentPage(0)}} style={{padding:"4px 10px",background:filterBrand===b?(T.accent||"#2d8cf0")+"12":"transparent",color:filterBrand===b?T.accent||"#2d8cf0":T.muted,border:filterBrand===b?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b}</button>)}
+      <button onClick={()=>{setFilterBrand("")}} style={{padding:"4px 10px",background:!filterBrand?(T.accent||"#2d8cf0")+"12":"transparent",color:!filterBrand?T.accent||"#2d8cf0":T.muted,border:!filterBrand?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}}>全て</button>
+      {topBrands.map(b=><button key={b} onClick={()=>{setFilterBrand(filterBrand===b?"":b)}} style={{padding:"4px 10px",background:filterBrand===b?(T.accent||"#2d8cf0")+"12":"transparent",color:filterBrand===b?T.accent||"#2d8cf0":T.muted,border:filterBrand===b?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b}</button>)}
     </div>
   </div>
   {/* Error */}
@@ -7246,12 +7258,9 @@ if(docPage==="master"){return(
     </div>
   ))}
   </div>
-  {/* Pagination */}
-  {totalCount>0&&<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:12,marginTop:12,fontSize:11,color:T.muted}}>
-    <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0} style={{padding:"5px 10px",background:currentPage===0?T.borderLight||"#eee":T.primary,color:currentPage===0?T.muted:"#fff",border:"none",borderRadius:5,fontSize:11,fontWeight:600,cursor:currentPage===0?"default":"pointer"}}>前へ</button>
-    <span>{startIdx+1}-{endIdx} / {totalCount}</span>
-    <button onClick={()=>setCurrentPage(p=>p+1)} disabled={endIdx>=totalCount} style={{padding:"5px 10px",background:endIdx>=totalCount?T.borderLight||"#eee":T.primary,color:endIdx>=totalCount?T.muted:"#fff",border:"none",borderRadius:5,fontSize:11,fontWeight:600,cursor:endIdx>=totalCount?"default":"pointer"}}>次へ</button>
-  </div>}
+  {/* Infinite scroll loading */}
+  {loadingMore&&<div style={{textAlign:"center",padding:16,color:T.muted,fontSize:11}}>読み込み中...</div>}
+  {!hasMore&&products.length>0&&<div style={{textAlign:"center",padding:12,color:T.muted,fontSize:10}}>{products.length} / {totalCount}件 すべて表示</div>}
 
   {/* Edit Modal */}
   {showEdit&&editProduct&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:12}} onClick={closeEdit}>
