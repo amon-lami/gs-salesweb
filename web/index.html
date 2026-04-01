@@ -7093,12 +7093,18 @@ useEffect(()=>{
 useEffect(()=>{
   if(!client||docPage!=="master")return;
   const load=async(col,setter)=>{const{data}=await client.from("product_master").select(col);if(data){const u=[...new Set(data.map(r=>r[col]).filter(Boolean))].sort();setter(u)}};
-  load("brand",setBrands);load("supplier",setSuppliers);load("sub_brand",setSubBrands);
+  load("brand",setBrands);load("sub_brand",setSubBrands);
+  // Load all supplier names (from old TEXT column + new JSONB column)
+  client.from("product_master").select("supplier,suppliers").then(({data})=>{if(data){const u=[...new Set([...data.map(r=>r.supplier),...data.flatMap(r=>(r.suppliers||[]).map(s=>s.name))].filter(Boolean))].sort();setSuppliers(u)}});
   client.from("product_master").select("tags").then(({data})=>{if(data){const u=[...new Set(data.flatMap(r=>r.tags||[]).filter(Boolean))].sort();setAllTags(u)}});
 },[client,docPage]);
 
 const[successorPreview,setSuccessorPreview]=useState(null);
-const openEdit=(p)=>{const obj=p?{...p,tags:p.tags||[],suppliers:p.suppliers||[],discontinued_jans:p.discontinued_jans||[]}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",image_url:"",cost_price:null,list_price:null,case_quantity:null,case_size:"",case_weight_g:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:"",tags:[],suppliers:[],discontinued_jans:[]};setEditProduct(obj);setOrigProduct(p?{...p,tags:p.tags||[],suppliers:p.suppliers||[],discontinued_jans:p.discontinued_jans||[]}:null);setSaveErr("");setSuccessorPreview(null);setTagInput("");setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
+const openEdit=(p)=>{
+  // If new suppliers array is empty but old supplier/cost_price exist, migrate them
+  let sup=p?.suppliers||[];
+  if(sup.length===0&&(p?.supplier||p?.cost_price!=null)){sup=[{name:p.supplier||"",cost_price:p.cost_price??null}];}
+  const obj=p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[]}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",image_url:"",cost_price:null,list_price:null,case_quantity:null,case_size:"",case_weight_g:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:"",tags:[],suppliers:[],discontinued_jans:[]};setEditProduct(obj);setOrigProduct(p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[]}:null);setSaveErr("");setSuccessorPreview(null);setTagInput("");setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
 const closeEdit=()=>{setShowEdit(false);setEditProduct(null);setOrigProduct(null)};
 
 const saveProduct=async()=>{
@@ -7325,6 +7331,10 @@ if(docPage==="master"){return(
               </div>
             ))}
             <button onClick={()=>setEditProduct(prev=>({...prev,suppliers:[...(prev.suppliers||[]),{name:"",cost_price:null}]}))} style={{fontSize:10,padding:"4px 12px",border:`1px dashed ${T.border}`,borderRadius:5,cursor:"pointer",color:T.muted,background:"none",marginTop:2}}>＋ 仕入先追加</button>
+            {suppliers.filter(s=>!(editProduct.suppliers||[]).some(e=>e.name===s)).length>0&&<div style={{marginTop:6}}>
+              <div style={{fontSize:9,color:T.muted,marginBottom:3}}>既存仕入先</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{suppliers.filter(s=>!(editProduct.suppliers||[]).some(e=>e.name===s)).map(s=><span key={s} onClick={()=>setEditProduct(prev=>({...prev,suppliers:[...(prev.suppliers||[]),{name:s,cost_price:null}]}))} style={{fontSize:9.5,padding:"2px 7px",borderRadius:10,border:"1px solid #d1d5db",color:T.sub,cursor:"pointer",background:T.card}}>+{s}</span>)}</div>
+            </div>}
           </div>
           {/* Category Tags */}
           <div style={{marginTop:12}}>
