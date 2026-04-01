@@ -7005,10 +7005,11 @@ return(
 function DocumentsPage({client,user,allUsers,accounts,contacts,deals,leads,currentBiz,onReload,onOpenDeal,pendingDocCreate}){
 const IS_MOBILE=window.innerWidth<768;
 const DEFAULT_JPY_RATE=150;
-const[docPage,_setDocPage]=useState("menu");
+const[docPage,_setDocPage]=useState(()=>{try{const s=localStorage.getItem("gs_docPage");return["menu","master","orders","doc_list","delivery"].includes(s)?s:"menu"}catch(e){return"menu"}});
 const[prefillDoc,setPrefillDoc]=useState(null);
 const setDocPage=(pg)=>{
   _setDocPage(pg);
+  try{localStorage.setItem("gs_docPage",pg)}catch(e){}
   if(pg==="menu"){
     window.history.replaceState({_gs:true,view:"docPage",docPage:"menu"},"");
   }else{
@@ -8758,7 +8759,7 @@ function App(){
   const bizAccountsMap=useMemo(()=>{const m={};bizAccounts.forEach(a=>{m[a.id]=a});return m},[bizAccounts]);
 
   // UI state
-  const[page,setPage]=useState(()=>{const h=location.hash.replace("#","");return["home","deals","accounts","contacts","leads","chat","settings","reports","expenses"].includes(h)?h:"home"});
+  const[page,setPage]=useState(()=>{const h=location.hash.replace("#","");return["home","deals","accounts","contacts","leads","chat","settings","reports","expenses","documents","todos"].includes(h)?h:"home"});
   const[showMobileMenu,setShowMobileMenu]=useState(false);
   const[viewMode,setViewMode]=useState("kanban");
   const[selectedCategory,setSelectedCategory]=useState("");
