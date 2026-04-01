@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://*.supabase.co wss://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com https://cdn.jsdelivr.net https://*.supabase.co wss://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https: http:;">
   <title>GS Sales</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
   <!-- Preload: ブラウザにリソースを並列で先読みさせる -->
@@ -7223,24 +7223,29 @@ if(docPage==="master"){return(
   {error&&<div style={{padding:8,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,marginBottom:8}}>{error}</div>}
   {/* Loading */}
   {loading&&<div style={{textAlign:"center",padding:20,color:T.muted,fontSize:11}}>読み込み中...</div>}
-  {/* Product List */}
+  {/* Product List - Grid */}
+  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}}>
   {!loading&&products.map(p=>(
-    <div key={p.id} onClick={()=>openEdit(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:T.card,border:`1px solid ${T.borderLight}`,borderRadius:8,marginBottom:4,cursor:"pointer",transition:"background .1s"}}
-      onMouseEnter={e=>e.currentTarget.style.background=T.hover} onMouseLeave={e=>e.currentTarget.style.background=T.card}>
-      {p.image_url?<img src={p.image_url} style={{width:36,height:36,borderRadius:6,objectFit:"cover",flexShrink:0}} onError={e=>e.target.style.display="none"}/>:<div style={{width:36,height:36,borderRadius:6,background:T.borderLight||"#eee",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:T.muted}}>📦</div>}
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:12,fontWeight:600,color:T.primary,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name_en||p.name_ja||"名称なし"}</div>
-        <div style={{fontSize:10,color:T.muted,marginTop:1}}>{p.jan}{p.brand?` · ${p.brand}`:""}</div>
+    <div key={p.id} onClick={()=>openEdit(p)} style={{background:T.card,border:`1px solid ${T.borderLight}`,borderRadius:10,cursor:"pointer",transition:"box-shadow .15s,transform .15s",overflow:"hidden"}}
+      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.1)";e.currentTarget.style.transform="translateY(-2px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none"}}>
+      <div style={{width:"100%",aspectRatio:"1",background:"#f8f8f8",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+        <img src={p.image_url||"https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src="https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"}}/>
       </div>
-      <div style={{textAlign:"right",flexShrink:0}}>
-        {p.cost_price!=null&&<div style={{fontSize:10,color:T.sub}}>¥{Number(p.cost_price).toLocaleString()}</div>}
-        {p.selling_price!=null&&<div style={{fontSize:10,fontWeight:600,color:T.green}}>${Number(p.selling_price).toFixed(2)}</div>}
-        <span style={{fontSize:8,padding:"1px 4px",borderRadius:3,background:p.status==="active"?T.green+"18":p.is_discontinued?"#dc262618":T.red+"18",color:p.status==="active"?T.green:p.is_discontinued?"#dc2626":T.red,fontWeight:600}}>{p.is_discontinued?"廃盤":p.status==="active"?"有効":"停止"}</span>
-        {p.is_discontinued&&p.successor_jan&&<div style={{fontSize:8,color:"#c2410c",marginTop:1}}>→{p.successor_jan}</div>}
+      <div style={{padding:"8px 10px"}}>
+        <div style={{fontSize:11.5,fontWeight:600,color:T.primary,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:"1.4",minHeight:"32px"}}>{p.name_en||p.name_ja||"名称なし"}</div>
+        <div style={{fontSize:9.5,color:T.muted,marginTop:3}}>{p.jan}</div>
+        {p.brand&&<div style={{fontSize:9.5,color:T.sub,marginTop:1}}>{p.brand}</div>}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
+          <div>
+            {p.cost_price!=null&&<span style={{fontSize:10,color:T.sub}}>¥{Number(p.cost_price).toLocaleString()}</span>}
+            {p.selling_price!=null&&<span style={{fontSize:10,fontWeight:600,color:T.green,marginLeft:6}}>${Number(p.selling_price).toFixed(2)}</span>}
+          </div>
+          <span style={{fontSize:8,padding:"1px 4px",borderRadius:3,background:p.status==="active"?T.green+"18":p.is_discontinued?"#dc262618":T.red+"18",color:p.status==="active"?T.green:p.is_discontinued?"#dc2626":T.red,fontWeight:600}}>{p.is_discontinued?"廃盤":p.status==="active"?"有効":"停止"}</span>
+        </div>
       </div>
-      <button onClick={e=>{e.stopPropagation();openAudit(p.id)}} style={{background:"none",border:"none",fontSize:10,color:T.blue||"#3b82f6",cursor:"pointer",textDecoration:"underline",flexShrink:0}} title="変更履歴">履歴</button>
     </div>
   ))}
+  </div>
   {/* Pagination */}
   {totalCount>0&&<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:12,marginTop:12,fontSize:11,color:T.muted}}>
     <button onClick={()=>setCurrentPage(p=>Math.max(0,p-1))} disabled={currentPage===0} style={{padding:"5px 10px",background:currentPage===0?T.borderLight||"#eee":T.primary,color:currentPage===0?T.muted:"#fff",border:"none",borderRadius:5,fontSize:11,fontWeight:600,cursor:currentPage===0?"default":"pointer"}}>前へ</button>
