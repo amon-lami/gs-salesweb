@@ -7058,6 +7058,8 @@ const[saveErr,setSaveErr]=useState("");
 const[showCsvImport,setShowCsvImport]=useState(false);
 const[csvData,setCsvData]=useState(null);
 const[csvImporting,setCsvImporting]=useState(false);
+const[allTags,setAllTags]=useState([]);
+const[tagInput,setTagInput]=useState("");
 const LIMIT=50;
 const searchTimer=useRef(null);
 
@@ -7092,10 +7094,11 @@ useEffect(()=>{
   if(!client||docPage!=="master")return;
   const load=async(col,setter)=>{const{data}=await client.from("product_master").select(col);if(data){const u=[...new Set(data.map(r=>r[col]).filter(Boolean))].sort();setter(u)}};
   load("brand",setBrands);load("supplier",setSuppliers);load("sub_brand",setSubBrands);
+  client.from("product_master").select("tags").then(({data})=>{if(data){const u=[...new Set(data.flatMap(r=>r.tags||[]).filter(Boolean))].sort();setAllTags(u)}});
 },[client,docPage]);
 
 const[successorPreview,setSuccessorPreview]=useState(null);
-const openEdit=(p)=>{const obj=p?{...p}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",supplier:"",image_url:"",cost_price:null,list_price:null,selling_price:null,case_quantity:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:""};setEditProduct(obj);setOrigProduct(p?{...p}:null);setSaveErr("");setSuccessorPreview(null);setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
+const openEdit=(p)=>{const obj=p?{...p,tags:p.tags||[],suppliers:p.suppliers||[],discontinued_jans:p.discontinued_jans||[]}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",image_url:"",cost_price:null,list_price:null,case_quantity:null,case_size:"",case_weight_g:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:"",tags:[],suppliers:[],discontinued_jans:[]};setEditProduct(obj);setOrigProduct(p?{...p,tags:p.tags||[],suppliers:p.suppliers||[],discontinued_jans:p.discontinued_jans||[]}:null);setSaveErr("");setSuccessorPreview(null);setTagInput("");setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
 const closeEdit=()=>{setShowEdit(false);setEditProduct(null);setOrigProduct(null)};
 
 const saveProduct=async()=>{
@@ -7105,7 +7108,9 @@ const saveProduct=async()=>{
   try{
     if(editProduct.id){
       const updates={};const auditEntries=[];
-      const fields=["name_ja","name_en","jan","brand","sub_brand","supplier","image_url","cost_price","list_price","selling_price","case_quantity","weight_g","price_break_qty","status","ingredients_en","is_discontinued","successor_jan"];
+      const fields=["name_ja","name_en","jan","brand","sub_brand","image_url","list_price","case_quantity","case_size","case_weight_g","weight_g","price_break_qty","status","ingredients_en","is_discontinued","successor_jan","tags","suppliers","discontinued_jans"];
+      // sync cost_price/supplier from first suppliers entry for backwards compat
+      if(editProduct.suppliers?.length>0){const s0=editProduct.suppliers[0];if(s0.cost_price!=null)updates.cost_price=s0.cost_price;if(s0.name)updates.supplier=s0.name;}
       fields.forEach(f=>{if(JSON.stringify(editProduct[f])!==JSON.stringify(origProduct[f])){updates[f]=editProduct[f];auditEntries.push({product_id:editProduct.id,changed_by:user.id,field_name:f,old_value:String(origProduct[f]??""),new_value:String(editProduct[f]??""),changed_at:new Date().toISOString()})}});
       if(Object.keys(updates).length>0){
         updates.updated_at=new Date().toISOString();
@@ -7247,10 +7252,10 @@ if(docPage==="master"){return(
         <div style={{fontSize:11.5,fontWeight:600,color:T.primary,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:"1.4",minHeight:"32px"}}>{p.name_en||p.name_ja||"名称なし"}</div>
         <div style={{fontSize:9.5,color:T.muted,marginTop:3}}>{p.jan}</div>
         {p.brand&&<div style={{fontSize:9.5,color:T.sub,marginTop:1}}>{p.brand}</div>}
+        {(p.tags||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:2,marginTop:3}}>{(p.tags||[]).map(t=><span key={t} style={{fontSize:8,padding:"1px 5px",borderRadius:10,background:"#e0e7ff",color:"#4338ca",fontWeight:600}}>{t}</span>)}</div>}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
           <div>
             {p.cost_price!=null&&<span style={{fontSize:10,color:T.sub}}>¥{Number(p.cost_price).toLocaleString()}</span>}
-            {p.selling_price!=null&&<span style={{fontSize:10,fontWeight:600,color:T.green,marginLeft:6}}>${Number(p.selling_price).toFixed(2)}</span>}
           </div>
           <span style={{fontSize:8,padding:"1px 4px",borderRadius:3,background:p.status==="active"?T.green+"18":p.is_discontinued?"#dc262618":T.red+"18",color:p.status==="active"?T.green:p.is_discontinued?"#dc2626":T.red,fontWeight:600}}>{p.is_discontinued?"廃盤":p.status==="active"?"有効":"停止"}</span>
         </div>
@@ -7263,56 +7268,118 @@ if(docPage==="master"){return(
   {!hasMore&&products.length>0&&<div style={{textAlign:"center",padding:12,color:T.muted,fontSize:10}}>{products.length} / {totalCount}件 すべて表示</div>}
 
   {/* Edit Modal */}
-  {showEdit&&editProduct&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:12}} onClick={closeEdit}>
-    <div style={{background:T.card,borderRadius:12,padding:18,width:"100%",maxWidth:540,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 12px 40px rgba(0,0,0,.15)"}} onClick={e=>e.stopPropagation()}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+  {showEdit&&editProduct&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,padding:IS_MOBILE?8:16}} onClick={closeEdit}>
+    <div style={{background:T.card,borderRadius:12,padding:18,width:"100%",maxWidth:IS_MOBILE?540:820,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 40px rgba(0,0,0,.15)"}} onClick={e=>e.stopPropagation()}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,flexShrink:0}}>
         <h3 style={{margin:0,fontSize:14,fontWeight:700,color:T.primary}}>{editProduct.id?"商品編集":"新規商品追加"}</h3>
         <button onClick={closeEdit} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:T.muted}}>✕</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:IS_MOBILE?"1fr":"1fr 1fr",gap:10}}>
-        {[{k:"name_ja",l:"名前(日本語)",type:"text"},{k:"name_en",l:"名前(英語)",type:"text"},{k:"jan",l:"JAN",type:"text",ro:!!editProduct.id},{k:"brand",l:"ブランド",type:"text",list:"pm-brands"},{k:"sub_brand",l:"サブブランド",type:"text",list:"pm-subs"},{k:"supplier",l:"仕入先",type:"text",list:"pm-suppliers"},
-          {k:"cost_price",l:"下代 (¥)",type:"number"},{k:"list_price",l:"定価 (¥)",type:"number"},{k:"selling_price",l:"提案価格 (USD)",type:"number"},{k:"weight_g",l:"重量 (g)",type:"number"},{k:"case_quantity",l:"ケース入数",type:"number"},{k:"price_break_qty",l:"価格変動数量",type:"number"},
-          {k:"image_url",l:"画像URL",type:"text"},{k:"status",l:"ステータス",type:"select",opts:[["active","アクティブ"],["inactive","非アクティブ"],["discontinued","廃盤"]]}
-        ].map(f=>(
-          <div key={f.k}>
-            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>{f.l}</div>
-            {f.type==="select"?
-              <select value={editProduct[f.k]||"active"} onChange={e=>setEditProduct(prev=>({...prev,[f.k]:e.target.value}))} style={{width:"100%",padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box"}}>
-                {f.opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}
-              </select>
-            :<input type={f.type} value={editProduct[f.k]??""}
-              onChange={e=>{const v=f.type==="number"?(e.target.value===""?null:Number(e.target.value)):e.target.value;setEditProduct(prev=>({...prev,[f.k]:v}))}}
-              readOnly={f.ro} list={f.list||undefined}
-              style={{width:"100%",padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box",background:f.ro?T.borderLight||"#eee":"#fff"}}/>}
+      {/* Body: image left + form right */}
+      <div style={{display:"flex",gap:16,flex:1,overflow:"hidden",flexDirection:IS_MOBILE?"column":"row"}}>
+        {/* Left: thumbnail */}
+        <div style={{width:IS_MOBILE?"100%":230,flexShrink:0,display:"flex",flexDirection:IS_MOBILE?"row":"column",gap:8,alignItems:IS_MOBILE?"flex-start":"stretch"}}>
+          <div style={{width:IS_MOBILE?120:230,height:IS_MOBILE?120:"auto",aspectRatio:IS_MOBILE?undefined:"1",background:"#f8f8f8",borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <img src={editProduct.image_url||"https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src="https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"}}/>
           </div>
-        ))}
+          <div>
+            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>画像URL</div>
+            <input value={editProduct.image_url||""} onChange={e=>setEditProduct(prev=>({...prev,image_url:e.target.value}))} placeholder="https://..." style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:10,fontFamily:"inherit",boxSizing:"border-box"}}/>
+          </div>
+        </div>
+        {/* Right: form fields */}
+        <div style={{flex:1,overflowY:"auto",paddingRight:2}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {[{k:"name_ja",l:"名前(日本語)",type:"text"},{k:"name_en",l:"名前(英語)",type:"text"},
+              {k:"jan",l:"JAN",type:"text",ro:!!editProduct.id},{k:"brand",l:"ブランド",type:"text",list:"pm-brands"},
+              {k:"sub_brand",l:"サブブランド",type:"text",list:"pm-subs"},{k:"list_price",l:"定価 (¥)",type:"number"},
+              {k:"weight_g",l:"重量 (g)",type:"number"},{k:"case_quantity",l:"ケース入数",type:"number"},
+              {k:"case_size",l:"ケースサイズ",type:"text"},{k:"case_weight_g",l:"ケース重量 (g)",type:"number"},
+              {k:"price_break_qty",l:"価格変動数量",type:"number"},
+              {k:"status",l:"ステータス",type:"select",opts:[["active","アクティブ"],["inactive","非アクティブ"],["discontinued","廃盤"]]}
+            ].map(f=>(
+              <div key={f.k}>
+                <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>{f.l}</div>
+                {f.type==="select"?
+                  <select value={editProduct[f.k]||"active"} onChange={e=>setEditProduct(prev=>({...prev,[f.k]:e.target.value}))} style={{width:"100%",padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box"}}>
+                    {f.opts.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                  </select>
+                :<input type={f.type} value={editProduct[f.k]??""}
+                  onChange={e=>{const v=f.type==="number"?(e.target.value===""?null:Number(e.target.value)):e.target.value;setEditProduct(prev=>({...prev,[f.k]:v}))}}
+                  readOnly={f.ro} list={f.list||undefined}
+                  style={{width:"100%",padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box",background:f.ro?T.borderLight||"#eee":"#fff"}}/>}
+              </div>
+            ))}
+          </div>
+          <datalist id="pm-brands">{brands.map(b=><option key={b} value={b}/>)}</datalist>
+          <datalist id="pm-subs">{subBrands.map(b=><option key={b} value={b}/>)}</datalist>
+          <datalist id="pm-suppliers">{suppliers.map(s=><option key={s} value={s}/>)}</datalist>
+          {/* Suppliers */}
+          <div style={{marginTop:12}}>
+            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:5}}>仕入先・下代</div>
+            {(editProduct.suppliers||[]).map((s,i)=>(
+              <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
+                <input value={s.name||""} onChange={e=>{const arr=[...(editProduct.suppliers||[])];arr[i]={...arr[i],name:e.target.value};setEditProduct(prev=>({...prev,suppliers:arr}))}} placeholder="仕入先名" list="pm-suppliers" style={{flex:1,padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                <input type="number" value={s.cost_price??""} onChange={e=>{const arr=[...(editProduct.suppliers||[])];arr[i]={...arr[i],cost_price:e.target.value===""?null:Number(e.target.value)};setEditProduct(prev=>({...prev,suppliers:arr}))}} placeholder="下代(¥)" style={{width:88,padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,fontFamily:"inherit",boxSizing:"border-box"}}/>
+                <button onClick={()=>setEditProduct(prev=>({...prev,suppliers:(prev.suppliers||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.muted,fontSize:16,padding:"0 4px",lineHeight:1,flexShrink:0}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>setEditProduct(prev=>({...prev,suppliers:[...(prev.suppliers||[]),{name:"",cost_price:null}]}))} style={{fontSize:10,padding:"4px 12px",border:`1px dashed ${T.border}`,borderRadius:5,cursor:"pointer",color:T.muted,background:"none",marginTop:2}}>＋ 仕入先追加</button>
+          </div>
+          {/* Category Tags */}
+          <div style={{marginTop:12}}>
+            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:5}}>カテゴリタグ</div>
+            {(editProduct.tags||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:6}}>{(editProduct.tags||[]).map(t=><span key={t} style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,padding:"2px 8px",borderRadius:12,background:"#e0e7ff",color:"#4338ca",fontWeight:600}}>{t}<button onClick={()=>setEditProduct(prev=>({...prev,tags:(prev.tags||[]).filter(x=>x!==t)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#6366f1",padding:"0 0 0 2px",fontSize:12,lineHeight:1,fontWeight:700}}>×</button></span>)}</div>}
+            <div style={{position:"relative"}}>
+              <input value={tagInput} onChange={e=>setTagInput(e.target.value)}
+                onKeyDown={e=>{if(e.key==="Enter"&&tagInput.trim()){e.preventDefault();const t=tagInput.trim();if(!(editProduct.tags||[]).includes(t)){setEditProduct(prev=>({...prev,tags:[...(prev.tags||[]),t]}));if(!allTags.includes(t))setAllTags(prev=>[...prev,t].sort())};setTagInput("")}}}
+                placeholder="タグを入力 (Enterで追加)" style={{width:"100%",padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box"}}/>
+              {tagInput&&allTags.filter(t=>t.toLowerCase().includes(tagInput.toLowerCase())&&!(editProduct.tags||[]).includes(t)).length>0&&
+                <div style={{position:"absolute",top:"100%",left:0,right:0,background:T.card,border:`1px solid ${T.border}`,borderRadius:5,boxShadow:"0 4px 12px rgba(0,0,0,.12)",zIndex:20,maxHeight:140,overflowY:"auto"}}>
+                  {allTags.filter(t=>t.toLowerCase().includes(tagInput.toLowerCase())&&!(editProduct.tags||[]).includes(t)).map(t=>
+                    <div key={t} onClick={()=>{setEditProduct(prev=>({...prev,tags:[...(prev.tags||[]),t]}));setTagInput("")}}
+                      style={{padding:"7px 10px",cursor:"pointer",fontSize:11.5,color:T.primary}}
+                      onMouseEnter={e=>e.currentTarget.style.background="#f3f4f6"}
+                      onMouseLeave={e=>e.currentTarget.style.background=""}>{t}</div>
+                  )}
+                </div>}
+            </div>
+            {allTags.filter(t=>!(editProduct.tags||[]).includes(t)).length>0&&<div style={{marginTop:6}}>
+              <div style={{fontSize:9,color:T.muted,marginBottom:3}}>既存タグ</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{allTags.filter(t=>!(editProduct.tags||[]).includes(t)).map(t=><span key={t} onClick={()=>setEditProduct(prev=>({...prev,tags:[...(prev.tags||[]),t]}))} style={{fontSize:9.5,padding:"2px 7px",borderRadius:10,border:"1px solid #c7d2fe",color:"#4338ca",cursor:"pointer",background:"#f5f3ff"}}>+{t}</span>)}</div>
+            </div>}
+          </div>
+          {/* Ingredients */}
+          <div style={{marginTop:10}}>
+            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>成分表 (英語)</div>
+            <textarea value={editProduct.ingredients_en||""} onChange={e=>setEditProduct(prev=>({...prev,ingredients_en:e.target.value}))} style={{width:"100%",padding:7,border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,fontFamily:"monospace",boxSizing:"border-box",minHeight:60,resize:"vertical"}}/>
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:6,marginTop:8,fontSize:11,color:T.sub,cursor:"pointer"}}>
+            <input type="checkbox" checked={editProduct.is_discontinued||false} onChange={e=>setEditProduct(prev=>({...prev,is_discontinued:e.target.checked}))}/>廃盤フラグ
+          </label>
+          {(editProduct.is_discontinued||editProduct.successor_jan)&&<div style={{marginTop:8,padding:10,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#c2410c",marginBottom:5}}>🔄 後継品（リニューアル品）JAN</div>
+            <input value={editProduct.successor_jan||""} placeholder="後継品のJANコードを入力" onChange={e=>{const v=e.target.value.replace(/[^\d]/g,"");setEditProduct(prev=>({...prev,successor_jan:v}));setSuccessorPreview(null);if(v.length>=8){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",v).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})}}} style={{width:"100%",padding:"7px 8px",border:"1px solid #fed7aa",borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box",background:"#fff"}}/>
+            {successorPreview&&<div style={{marginTop:5,padding:6,background:"#dcfce7",borderRadius:5,fontSize:11,color:"#166534"}}>✅ {successorPreview.name_en||successorPreview.name_ja} {successorPreview.brand?`(${successorPreview.brand})`:""} - {successorPreview.jan}</div>}
+            {editProduct.successor_jan&&editProduct.successor_jan.length>=8&&!successorPreview&&<div style={{marginTop:5,fontSize:10,color:"#dc2626"}}>⚠ このJANコードの商品がマスタに見つかりません</div>}
+            {editProduct.successor_jan&&editProduct.successor_jan===editProduct.jan&&<div style={{marginTop:3,fontSize:10,color:"#dc2626"}}>⚠ 自分自身のJANは設定できません</div>}
+          </div>}
+          {/* Discontinued JANs */}
+          <div style={{marginTop:10,padding:10,background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:8}}>
+            <div style={{fontSize:10,fontWeight:600,color:"#7c3aed",marginBottom:5}}>廃番品JAN（旧JANコード一覧）</div>
+            {(editProduct.discontinued_jans||[]).map((jan,i)=>(
+              <div key={i} style={{display:"flex",gap:6,marginBottom:4,alignItems:"center"}}>
+                <input value={jan} onChange={e=>{const arr=[...(editProduct.discontinued_jans||[])];arr[i]=e.target.value.replace(/[^\d]/g,"");setEditProduct(prev=>({...prev,discontinued_jans:arr}))}} placeholder="旧JANコード" maxLength={14} style={{flex:1,padding:"5px 8px",border:"1px solid #d8b4fe",borderRadius:5,fontSize:11,fontFamily:"monospace",boxSizing:"border-box",background:"#fff"}}/>
+                <button onClick={()=>setEditProduct(prev=>({...prev,discontinued_jans:(prev.discontinued_jans||[]).filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:"#9333ea",fontSize:15,padding:"0 4px",lineHeight:1,flexShrink:0}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>setEditProduct(prev=>({...prev,discontinued_jans:[...(prev.discontinued_jans||[]),""]}))} style={{fontSize:10,padding:"3px 10px",border:"1px dashed #d8b4fe",borderRadius:5,cursor:"pointer",color:"#7c3aed",background:"none",marginTop:2}}>＋ 廃番JANを追加</button>
+          </div>
+        </div>
       </div>
-      <datalist id="pm-brands">{brands.map(b=><option key={b} value={b}/>)}</datalist>
-      <datalist id="pm-subs">{subBrands.map(b=><option key={b} value={b}/>)}</datalist>
-      <datalist id="pm-suppliers">{suppliers.map(s=><option key={s} value={s}/>)}</datalist>
-      <div style={{marginTop:10}}>
-        <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>成分表 (英語)</div>
-        <textarea value={editProduct.ingredients_en||""} onChange={e=>setEditProduct(prev=>({...prev,ingredients_en:e.target.value}))} style={{width:"100%",padding:7,border:`1px solid ${T.border}`,borderRadius:5,fontSize:11,fontFamily:"monospace",boxSizing:"border-box",minHeight:60,resize:"vertical"}}/>
-      </div>
-      <label style={{display:"flex",alignItems:"center",gap:6,marginTop:8,fontSize:11,color:T.sub,cursor:"pointer"}}>
-        <input type="checkbox" checked={editProduct.is_discontinued||false} onChange={e=>setEditProduct(prev=>({...prev,is_discontinued:e.target.checked}))}/>廃盤フラグ
-      </label>
-      {(editProduct.is_discontinued||editProduct.successor_jan)&&<div style={{marginTop:8,padding:10,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:8}}>
-        <div style={{fontSize:10,fontWeight:600,color:"#c2410c",marginBottom:5}}>🔄 後継品（リニューアル品）JAN</div>
-        <input value={editProduct.successor_jan||""} placeholder="後継品のJANコードを入力" onChange={e=>{const v=e.target.value.replace(/[^\d]/g,"");setEditProduct(prev=>({...prev,successor_jan:v}));setSuccessorPreview(null);if(v.length>=8){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",v).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})}}} style={{width:"100%",padding:"7px 8px",border:"1px solid #fed7aa",borderRadius:5,fontSize:11.5,fontFamily:"inherit",boxSizing:"border-box",background:"#fff"}}/>
-        {successorPreview&&<div style={{marginTop:5,padding:6,background:"#dcfce7",borderRadius:5,fontSize:11,color:"#166534"}}>✅ {successorPreview.name_en||successorPreview.name_ja} {successorPreview.brand?`(${successorPreview.brand})`:""} - {successorPreview.jan}</div>}
-        {editProduct.successor_jan&&editProduct.successor_jan.length>=8&&!successorPreview&&<div style={{marginTop:5,fontSize:10,color:"#dc2626"}}>⚠ このJANコードの商品がマスタに見つかりません</div>}
-        {editProduct.successor_jan&&editProduct.successor_jan===editProduct.jan&&<div style={{marginTop:3,fontSize:10,color:"#dc2626"}}>⚠ 自分自身のJANは設定できません</div>}
-      </div>}
-      {editProduct.image_url&&<div style={{marginTop:8}}><img src={editProduct.image_url} style={{maxHeight:60,borderRadius:6}} onError={e=>e.target.style.display="none"}/></div>}
-      {/* Profit preview */}
-      {editProduct.selling_price&&editProduct.cost_price&&<div style={{marginTop:10,padding:8,background:T.green+"10",borderRadius:6,fontSize:11}}>
-        <span style={{color:T.sub}}>利益: </span>
-        <span style={{fontWeight:700,color:T.green}}>${(editProduct.selling_price-(editProduct.cost_price/DEFAULT_JPY_RATE)).toFixed(2)}</span>
-        <span style={{color:T.muted,marginLeft:6}}>({((1-editProduct.cost_price/(DEFAULT_JPY_RATE*editProduct.selling_price))*100).toFixed(1)}%)</span>
-      </div>}
-      {saveErr&&<div style={{padding:8,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,marginTop:8}}>{saveErr}</div>}
-      <div style={{display:"flex",gap:8,marginTop:14}}>
+      {/* Footer */}
+      {saveErr&&<div style={{padding:8,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,marginTop:10,flexShrink:0}}>{saveErr}</div>}
+      <div style={{display:"flex",gap:8,marginTop:12,flexShrink:0}}>
         <button onClick={saveProduct} style={{flex:1,padding:10,background:T.green,color:"#fff",border:"none",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer"}}>保存</button>
         <button onClick={closeEdit} style={{flex:1,padding:10,background:T.borderLight||"#eee",color:T.muted,border:"none",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer"}}>キャンセル</button>
       </div>
