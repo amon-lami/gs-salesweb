@@ -1,20 +1,6 @@
 @echo off
-:: リポジトリルート（.claudeフォルダの親）に移動
-cd /d "%~dp0.."
-
-:: PATH に npm があればそのまま使用、なければ Windows の一般的なインストール先を追加
-where npm 1>nul 2>nul
-if %ERRORLEVEL% == 0 goto :run
-
 set PATH=C:\Program Files\nodejs;%PATH%
-where npm 1>nul 2>nul
-if %ERRORLEVEL% == 0 goto :run
-
-echo.
-echo [ERROR] npm が見つかりません。Node.js をインストールしてください。
-echo   https://nodejs.org/
-echo.
-exit /b 1
-
-:run
-npm run dev
+set VITE_SUPABASE_URL=https://yzwrumeukjidsguixqxr.supabase.co
+set VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6d3J1bWV1a2ppZHNndWl4cXhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQwNTcyMzAsImV4cCI6MjA4OTYzMzIzMH0.8KxvbsRnTXJsfB81PSfvszF6RMS5_S_9GoWkV10_41g
+cd /d C:\Users\josep\gs-salesweb-fresh
+"C:\Program Files\nodejs\npm.cmd" run dev

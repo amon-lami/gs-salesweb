@@ -200,7 +200,7 @@ export const Layout = memo(function Layout({ page, onPageChange, userName, chatU
         </div>
 
         {/* Main Content */}
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: T.bg }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: T.bg, overflowY: 'auto' }}>
           {children}
         </div>
       </div>
