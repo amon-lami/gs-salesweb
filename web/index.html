@@ -7061,6 +7061,7 @@ const[csvData,setCsvData]=useState(null);
 const[csvImporting,setCsvImporting]=useState(false);
 const[allTags,setAllTags]=useState([]);
 const[tagInput,setTagInput]=useState("");
+const[copiedJan,setCopiedJan]=useState(null);
 const LIMIT=50;
 const searchTimer=useRef(null);
 
@@ -7257,7 +7258,14 @@ if(docPage==="master"){return(
       </div>
       <div style={{padding:"8px 10px"}}>
         <div style={{fontSize:11.5,fontWeight:600,color:T.primary,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:"1.4",minHeight:"32px"}}>{p.name_en||p.name_ja||"名称なし"}</div>
-        <div onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(p.jan).then(()=>{const el=e.currentTarget;const prev=el.textContent;el.textContent="✓ コピー済";el.style.color=T.green;setTimeout(()=>{el.textContent=prev;el.style.color=""},1200)})}} title="クリックでコピー" style={{fontSize:9.5,color:T.muted,marginTop:3,cursor:"pointer",userSelect:"none"}}>{p.jan}</div>
+        <div style={{display:"flex",alignItems:"center",gap:4,marginTop:3}}>
+          <span style={{fontSize:9.5,color:T.muted}}>{p.jan}</span>
+          <span onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(p.jan).then(()=>{setCopiedJan(p.jan);setTimeout(()=>setCopiedJan(null),1500)})}} title="コピー" style={{cursor:"pointer",color:copiedJan===p.jan?T.green:T.muted,display:"inline-flex",alignItems:"center",position:"relative",flexShrink:0}}>
+            {copiedJan===p.jan
+              ?<span style={{fontSize:8.5,fontWeight:600,color:T.green,whiteSpace:"nowrap"}}>コピーしました</span>
+              :<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M3 11H2a1 1 0 01-1-1V2a1 1 0 011-1h8a1 1 0 011 1v1"/></svg>}
+          </span>
+        </div>
         {p.brand&&<div style={{fontSize:9.5,color:T.sub,marginTop:1}}>{p.brand}</div>}
         {(p.tags||[]).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:2,marginTop:3}}>{(p.tags||[]).map(t=><span key={t} style={{fontSize:8,padding:"1px 5px",borderRadius:10,background:"#e0e7ff",color:"#4338ca",fontWeight:600}}>{t}</span>)}</div>}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:4}}>
