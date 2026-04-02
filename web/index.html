@@ -7259,7 +7259,7 @@ if(docPage==="master"){return(
       <div style={{padding:"8px 10px"}}>
         <div style={{fontSize:11.5,fontWeight:600,color:T.primary,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:"1.4",minHeight:"32px"}}>{p.name_en||p.name_ja||"名称なし"}</div>
         <div style={{display:"flex",alignItems:"center",gap:4,marginTop:3}}>
-          <span style={{fontSize:9.5,color:T.muted}}>{p.jan}</span>
+          <span onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(p.jan).then(()=>{setCopiedJan(p.jan);setTimeout(()=>setCopiedJan(null),1500)})}} style={{fontSize:9.5,color:T.muted,cursor:"pointer",userSelect:"none"}}>{p.jan}</span>
           <span onClick={e=>{e.stopPropagation();navigator.clipboard.writeText(p.jan).then(()=>{setCopiedJan(p.jan);setTimeout(()=>setCopiedJan(null),1500)})}} title="コピー" style={{cursor:"pointer",color:copiedJan===p.jan?T.green:T.muted,display:"inline-flex",alignItems:"center",position:"relative",flexShrink:0}}>
             {copiedJan===p.jan
               ?<span style={{fontSize:8.5,fontWeight:600,color:T.green,whiteSpace:"nowrap"}}>コピーしました</span>
