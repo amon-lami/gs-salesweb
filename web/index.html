@@ -7166,7 +7166,6 @@ const importCsv=async()=>{
   }catch(e){setSaveErr(e.message)}finally{setCsvImporting(false)}
 };
 
-const topBrands=useMemo(()=>{const counts={};products.forEach(p=>{if(p.brand)counts[p.brand]=(counts[p.brand]||0)+1});return brands.slice(0,6)},[brands,products]);
 const sn=(uid)=>{const u=(allUsers||[]).find(x=>x.id===uid);return u?u.display_name||u.email?.split("@")[0]||"不明":"不明"};
 
 // ── Menu ──
@@ -7239,10 +7238,10 @@ if(docPage==="master"){return(
     <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:T.sub}}>
       <option value="">全ステータス</option><option value="active">アクティブ</option><option value="inactive">非アクティブ</option><option value="discontinued">廃盤</option>
     </select>
-    <div style={{display:"flex",gap:4,alignItems:"center"}}>
-      <button onClick={()=>{setFilterBrand("")}} style={{padding:"4px 10px",background:!filterBrand?(T.accent||"#2d8cf0")+"12":"transparent",color:!filterBrand?T.accent||"#2d8cf0":T.muted,border:!filterBrand?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer"}}>全て</button>
-      {topBrands.map(b=><button key={b} onClick={()=>{setFilterBrand(filterBrand===b?"":b)}} style={{padding:"4px 10px",background:filterBrand===b?(T.accent||"#2d8cf0")+"12":"transparent",color:filterBrand===b?T.accent||"#2d8cf0":T.muted,border:filterBrand===b?`1px solid ${T.accent||"#2d8cf0"}`:"1px solid transparent",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b}</button>)}
-    </div>
+    <select value={filterBrand} onChange={e=>setFilterBrand(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${filterBrand?T.accent||"#2d8cf0":T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:filterBrand?T.accent||"#2d8cf0":T.sub,fontWeight:filterBrand?600:400,minWidth:120,maxWidth:160}}>
+      <option value="">全ブランド</option>
+      {brands.map(b=><option key={b} value={b}>{b}</option>)}
+    </select>
   </div>
   {/* Error */}
   {error&&<div style={{padding:8,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,marginBottom:8}}>{error}</div>}
