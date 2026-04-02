@@ -7064,6 +7064,8 @@ const[tagInput,setTagInput]=useState("");
 const[copiedJan,setCopiedJan]=useState(null);
 const[hovImgIdx,setHovImgIdx]=useState(0);
 const[editingSupplierIdxs,setEditingSupplierIdxs]=useState(new Set());
+const[imgUploading,setImgUploading]=useState(false);
+const imgFileInputRef=useRef(null);
 const LIMIT=50;
 const searchTimer=useRef(null);
 
@@ -7112,6 +7114,35 @@ const openEdit=(p)=>{
   if(imgs.length===0&&p?.image_url)imgs=[p.image_url];
   const obj=p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[],image_urls:imgs}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",image_url:"",image_urls:[],cost_price:null,list_price:null,case_quantity:null,case_size:"",case_weight_g:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:"",tags:[],suppliers:[],discontinued_jans:[]};setEditProduct(obj);setOrigProduct(p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[],image_urls:imgs}:null);setSaveErr("");setSuccessorPreview(null);setTagInput("");setHovImgIdx(0);setEditingSupplierIdxs(new Set());setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
 const closeEdit=()=>{setShowEdit(false);setEditProduct(null);setOrigProduct(null)};
+
+const handleImgFileSelect=async(file)=>{
+  if(!file)return;
+  const jan=editProduct?.jan;
+  if(!jan){alert("先にJANコードを入力してください");return;}
+  const ext=(file.name.split('.').pop()||"jpg").toLowerCase();
+  // List existing files in storage with this JAN prefix to determine next position
+  const{data:listData}=await client.storage.from("product-images").list("",{search:jan+"-"});
+  let maxPos=0;
+  if(listData){
+    const re=new RegExp(`^${jan}-(\\d+)\\.`);
+    for(const f of listData){const m=f.name.match(re);if(m)maxPos=Math.max(maxPos,parseInt(m[1],10));}
+  }
+  // Also check current image_urls for any already-uploaded URLs matching this JAN
+  const re2=new RegExp(`/${jan}-(\\d+)\\.`);
+  for(const url of(editProduct.image_urls||[])){const m=url.match(re2);if(m)maxPos=Math.max(maxPos,parseInt(m[1],10));}
+  const fileName=`${jan}-${maxPos+1}.${ext}`;
+  setImgUploading(true);
+  const{error}=await client.storage.from("product-images").upload(fileName,file,{cacheControl:"3600",upsert:false,contentType:file.type});
+  if(error){setImgUploading(false);alert("アップロード失敗: "+error.message);return;}
+  const{data:urlData}=client.storage.from("product-images").getPublicUrl(fileName);
+  const publicUrl=urlData?.publicUrl||"";
+  setEditProduct(prev=>{
+    const arr=[...(prev.image_urls||[]),publicUrl];
+    return{...prev,image_urls:arr,image_url:arr[0]||""};
+  });
+  setHovImgIdx((editProduct.image_urls||[]).length);
+  setImgUploading(false);
+};
 
 const saveProduct=async()=>{
   setSaveErr("");
@@ -7306,6 +7337,8 @@ if(docPage==="master"){return(
           <div style={{width:"100%",aspectRatio:IS_MOBILE?undefined:"1",height:IS_MOBILE?160:"auto",background:"#f8f8f8",borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
             <img src={mainSrc} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src=noImg}}/>
           </div>
+          {/* Hidden file input */}
+          <input ref={imgFileInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{handleImgFileSelect(e.target.files[0]);e.target.value="";}}/>
           {/* Thumbnail row */}
           <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
             {imgs.map((url,i)=>(
@@ -7316,14 +7349,15 @@ if(docPage==="master"){return(
                 <button onClick={()=>{const arr=imgs.filter((_,j)=>j!==i);setEditProduct(prev=>({...prev,image_urls:arr,image_url:arr[0]||""}));setHovImgIdx(Math.max(0,Math.min(hovImgIdx,arr.length-1)))}} style={{position:"absolute",top:-5,right:-5,background:"#dc2626",border:"none",borderRadius:"50%",width:16,height:16,cursor:"pointer",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0,fontWeight:700}}>×</button>
               </div>
             ))}
-            <button onClick={()=>{setEditProduct(prev=>({...prev,image_urls:[...imgs,""]}));setHovImgIdx(imgs.length)}} style={{width:58,height:58,flexShrink:0,border:`1px dashed ${T.border}`,borderRadius:5,cursor:"pointer",background:"none",color:T.muted,fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
+            <button onClick={()=>imgFileInputRef.current&&imgFileInputRef.current.click()} disabled={imgUploading} style={{width:58,height:58,flexShrink:0,border:`1px dashed ${T.border}`,borderRadius:5,cursor:imgUploading?"wait":"pointer",background:"none",color:T.muted,fontSize:imgUploading?11:22,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>{imgUploading?"⏳":"+"}
+            </button>
           </div>
           {/* URL input for active image */}
           {imgs.length>0&&<div>
             <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>画像URL {imgs.length>1?`(${hovImgIdx+1}/${imgs.length})`:""}</div>
             <input value={imgs[hovImgIdx]||""} onChange={e=>{const arr=[...imgs];arr[hovImgIdx]=e.target.value;setEditProduct(prev=>({...prev,image_urls:arr,image_url:arr[0]||""}))}} placeholder="https://..." style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:10,fontFamily:"inherit",boxSizing:"border-box"}}/>
           </div>}
-          {imgs.length===0&&<button onClick={()=>{setEditProduct(prev=>({...prev,image_urls:[""]}));setHovImgIdx(0)}} style={{padding:"7px",border:`1px dashed ${T.border}`,borderRadius:5,cursor:"pointer",background:"none",color:T.muted,fontSize:11,fontFamily:"inherit"}}>＋ 画像を追加</button>}
+          {imgs.length===0&&<button onClick={()=>imgFileInputRef.current&&imgFileInputRef.current.click()} disabled={imgUploading} style={{padding:"7px 12px",border:`1px dashed ${T.border}`,borderRadius:5,cursor:imgUploading?"wait":"pointer",background:"none",color:T.muted,fontSize:11,fontFamily:"inherit"}}>{imgUploading?"アップロード中…":"＋ 画像をアップロード"}</button>}
         </div>
         )})()}
         {/* Right: form fields */}
@@ -7406,10 +7440,6 @@ if(docPage==="master"){return(
                       )}
                     </div>}
                 </div>
-                {allTags.filter(t=>!(editProduct.tags||[]).includes(t)).length>0&&<div style={{marginTop:6}}>
-                  <div style={{fontSize:9,color:T.muted,marginBottom:3}}>既存タグ</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:3}}>{allTags.filter(t=>!(editProduct.tags||[]).includes(t)).map(t=><span key={t} onClick={()=>setEditProduct(prev=>({...prev,tags:[...(prev.tags||[]),t]}))} style={{fontSize:9.5,padding:"2px 7px",borderRadius:10,border:"1px solid #c7d2fe",color:"#4338ca",cursor:"pointer",background:"#f5f3ff"}}>+{t}</span>)}</div>
-                </div>}
               </div>
               {/* Ingredients */}
               <div style={{marginTop:10,marginBottom:12}}>
