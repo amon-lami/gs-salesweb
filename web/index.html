@@ -7062,6 +7062,7 @@ const[csvImporting,setCsvImporting]=useState(false);
 const[allTags,setAllTags]=useState([]);
 const[tagInput,setTagInput]=useState("");
 const[copiedJan,setCopiedJan]=useState(null);
+const[hovImgIdx,setHovImgIdx]=useState(0);
 const LIMIT=50;
 const searchTimer=useRef(null);
 
@@ -7106,7 +7107,9 @@ const openEdit=(p)=>{
   // If new suppliers array is empty but old supplier/cost_price exist, migrate them
   let sup=p?.suppliers||[];
   if(sup.length===0&&(p?.supplier||p?.cost_price!=null)){sup=[{name:p.supplier||"",cost_price:p.cost_price??null}];}
-  const obj=p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[]}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",image_url:"",cost_price:null,list_price:null,case_quantity:null,case_size:"",case_weight_g:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:"",tags:[],suppliers:[],discontinued_jans:[]};setEditProduct(obj);setOrigProduct(p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[]}:null);setSaveErr("");setSuccessorPreview(null);setTagInput("");setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
+  let imgs=p?.image_urls||[];
+  if(imgs.length===0&&p?.image_url)imgs=[p.image_url];
+  const obj=p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[],image_urls:imgs}:{name_ja:"",name_en:"",jan:"",brand:"",sub_brand:"",image_url:"",image_urls:[],cost_price:null,list_price:null,case_quantity:null,case_size:"",case_weight_g:null,weight_g:null,price_break_qty:null,status:"active",ingredients_en:"",is_discontinued:false,successor_jan:"",tags:[],suppliers:[],discontinued_jans:[]};setEditProduct(obj);setOrigProduct(p?{...p,tags:p.tags||[],suppliers:sup,discontinued_jans:p.discontinued_jans||[],image_urls:imgs}:null);setSaveErr("");setSuccessorPreview(null);setTagInput("");setHovImgIdx(0);setShowEdit(true);if(p?.successor_jan){client.from("product_master").select("jan,name_en,name_ja,brand").eq("jan",p.successor_jan).limit(1).then(({data})=>{if(data&&data[0])setSuccessorPreview(data[0])})};};
 const closeEdit=()=>{setShowEdit(false);setEditProduct(null);setOrigProduct(null)};
 
 const saveProduct=async()=>{
@@ -7116,9 +7119,11 @@ const saveProduct=async()=>{
   try{
     if(editProduct.id){
       const updates={};const auditEntries=[];
-      const fields=["name_ja","name_en","jan","brand","sub_brand","image_url","list_price","case_quantity","case_size","case_weight_g","weight_g","price_break_qty","status","ingredients_en","is_discontinued","successor_jan","tags","suppliers","discontinued_jans"];
+      const fields=["name_ja","name_en","jan","brand","sub_brand","image_url","image_urls","list_price","case_quantity","case_size","case_weight_g","weight_g","price_break_qty","status","ingredients_en","is_discontinued","successor_jan","tags","suppliers","discontinued_jans"];
       // sync cost_price/supplier from first suppliers entry for backwards compat
       if(editProduct.suppliers?.length>0){const s0=editProduct.suppliers[0];if(s0.cost_price!=null)updates.cost_price=s0.cost_price;if(s0.name)updates.supplier=s0.name;}
+      // sync image_url from first image_urls entry
+      if((editProduct.image_urls||[]).length>0)updates.image_url=editProduct.image_urls[0]||"";
       fields.forEach(f=>{if(JSON.stringify(editProduct[f])!==JSON.stringify(origProduct[f])){updates[f]=editProduct[f];auditEntries.push({product_id:editProduct.id,changed_by:user.id,field_name:f,old_value:String(origProduct[f]??""),new_value:String(editProduct[f]??""),changed_at:new Date().toISOString()})}});
       if(Object.keys(updates).length>0){
         updates.updated_at=new Date().toISOString();
@@ -7253,7 +7258,7 @@ if(docPage==="master"){return(
     <div key={p.id} onClick={()=>openEdit(p)} style={{background:T.card,border:`1px solid ${T.borderLight}`,borderRadius:10,cursor:"pointer",transition:"box-shadow .15s,transform .15s",overflow:"hidden"}}
       onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,.1)";e.currentTarget.style.transform="translateY(-2px)"}} onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.transform="none"}}>
       <div style={{width:"100%",aspectRatio:"1",background:"#f8f8f8",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
-        <img src={p.image_url||"https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src="https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"}}/>
+        <img src={(p.image_urls&&p.image_urls[0])||p.image_url||"https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src="https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"}}/>
       </div>
       <div style={{padding:"8px 10px"}}>
         <div style={{fontSize:11.5,fontWeight:600,color:T.primary,overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",lineHeight:"1.4",minHeight:"32px"}}>{p.name_en||p.name_ja||"名称なし"}</div>
@@ -7291,16 +7296,33 @@ if(docPage==="master"){return(
       </div>
       {/* Body: image left + form right */}
       <div style={{display:"flex",gap:16,flex:1,overflow:"hidden",flexDirection:IS_MOBILE?"column":"row"}}>
-        {/* Left: thumbnail */}
-        <div style={{width:IS_MOBILE?"100%":230,flexShrink:0,display:"flex",flexDirection:IS_MOBILE?"row":"column",gap:8,alignItems:IS_MOBILE?"flex-start":"stretch"}}>
-          <div style={{width:IS_MOBILE?120:230,height:IS_MOBILE?120:"auto",aspectRatio:IS_MOBILE?undefined:"1",background:"#f8f8f8",borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <img src={editProduct.image_url||"https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src="https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg"}}/>
+        {/* Left: image gallery */}
+        {(()=>{const noImg="https://sesupport.edumall.jp/hc/article_attachments/900009570963/noImage.jpg";const imgs=editProduct.image_urls||[];const mainSrc=imgs[hovImgIdx]||imgs[0]||noImg;return(
+        <div style={{width:IS_MOBILE?"100%":230,flexShrink:0,display:"flex",flexDirection:"column",gap:6}}>
+          {/* Main image */}
+          <div style={{width:"100%",aspectRatio:IS_MOBILE?undefined:"1",height:IS_MOBILE?160:"auto",background:"#f8f8f8",borderRadius:8,border:`1px solid ${T.border}`,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <img src={mainSrc} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src=noImg}}/>
           </div>
-          <div>
-            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>画像URL</div>
-            <input value={editProduct.image_url||""} onChange={e=>setEditProduct(prev=>({...prev,image_url:e.target.value}))} placeholder="https://..." style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:10,fontFamily:"inherit",boxSizing:"border-box"}}/>
+          {/* Thumbnail row */}
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {imgs.map((url,i)=>(
+              <div key={i} style={{position:"relative",width:58,height:58,flexShrink:0}}>
+                <div onMouseEnter={()=>setHovImgIdx(i)} style={{width:58,height:58,background:"#f8f8f8",borderRadius:5,border:`2px solid ${hovImgIdx===i?(T.accent||"#2d8cf0"):T.border}`,overflow:"hidden",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxSizing:"border-box"}}>
+                  <img src={url||noImg} style={{width:"100%",height:"100%",objectFit:"contain"}} onError={e=>{e.target.onerror=null;e.target.src=noImg}}/>
+                </div>
+                <button onClick={()=>{const arr=imgs.filter((_,j)=>j!==i);setEditProduct(prev=>({...prev,image_urls:arr,image_url:arr[0]||""}));setHovImgIdx(Math.max(0,Math.min(hovImgIdx,arr.length-1)))}} style={{position:"absolute",top:-5,right:-5,background:"#dc2626",border:"none",borderRadius:"50%",width:16,height:16,cursor:"pointer",color:"#fff",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1,padding:0,fontWeight:700}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>{setEditProduct(prev=>({...prev,image_urls:[...imgs,""]}));setHovImgIdx(imgs.length)}} style={{width:58,height:58,flexShrink:0,border:`1px dashed ${T.border}`,borderRadius:5,cursor:"pointer",background:"none",color:T.muted,fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>+</button>
           </div>
+          {/* URL input for active image */}
+          {imgs.length>0&&<div>
+            <div style={{fontSize:10,fontWeight:600,color:T.muted,marginBottom:3}}>画像URL {imgs.length>1?`(${hovImgIdx+1}/${imgs.length})`:""}</div>
+            <input value={imgs[hovImgIdx]||""} onChange={e=>{const arr=[...imgs];arr[hovImgIdx]=e.target.value;setEditProduct(prev=>({...prev,image_urls:arr,image_url:arr[0]||""}))}} placeholder="https://..." style={{width:"100%",padding:"6px 8px",border:`1px solid ${T.border}`,borderRadius:5,fontSize:10,fontFamily:"inherit",boxSizing:"border-box"}}/>
+          </div>}
+          {imgs.length===0&&<button onClick={()=>{setEditProduct(prev=>({...prev,image_urls:[""]}));setHovImgIdx(0)}} style={{padding:"7px",border:`1px dashed ${T.border}`,borderRadius:5,cursor:"pointer",background:"none",color:T.muted,fontSize:11,fontFamily:"inherit"}}>＋ 画像を追加</button>}
         </div>
+        )})()}
         {/* Right: form fields */}
         <div style={{flex:1,overflowY:"auto",paddingRight:2}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
