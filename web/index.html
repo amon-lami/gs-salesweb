@@ -7236,18 +7236,20 @@ if(docPage==="master"){return(
       <button onClick={()=>openEdit(null)} style={{padding:"5px 12px",background:T.primary,color:"#fff",border:"none",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>+ 新規追加</button>
     </div>
   </div>
-  <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:IS_MOBILE?10:16}}>
-  {/* Search + Filters */}
-  <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",padding:"10px 12px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}>
-    <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="商品名 / JAN / ブランドで検索..." style={{flex:1,minWidth:150,padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",outline:"none",background:T.bg}}/>
-    <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:T.sub}}>
-      <option value="">全ステータス</option><option value="active">アクティブ</option><option value="inactive">非アクティブ</option><option value="discontinued">廃盤</option>
-    </select>
-    <select value={filterBrand} onChange={e=>setFilterBrand(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${filterBrand?T.accent||"#2d8cf0":T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:filterBrand?T.accent||"#2d8cf0":T.sub,fontWeight:filterBrand?600:400,minWidth:120,maxWidth:160}}>
-      <option value="">全ブランド</option>
-      {brands.map(b=><option key={b} value={b}>{b}</option>)}
-    </select>
+  {/* Search + Filters - sticky */}
+  <div style={{padding:`8px ${IS_MOBILE?10:16}px`,background:T.bg,borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",padding:"8px 10px",background:T.card,borderRadius:8,border:`1px solid ${T.border}`}}>
+      <input value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} placeholder="商品名 / JAN / ブランドで検索..." style={{flex:1,minWidth:150,padding:"7px 10px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",outline:"none",background:T.bg}}/>
+      <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:T.sub}}>
+        <option value="">全ステータス</option><option value="active">アクティブ</option><option value="inactive">非アクティブ</option><option value="discontinued">廃盤</option>
+      </select>
+      <select value={filterBrand} onChange={e=>setFilterBrand(e.target.value)} style={{padding:"7px 8px",border:`1px solid ${filterBrand?T.accent||"#2d8cf0":T.border}`,borderRadius:6,fontSize:11,fontFamily:"inherit",color:filterBrand?T.accent||"#2d8cf0":T.sub,fontWeight:filterBrand?600:400,minWidth:120,maxWidth:160}}>
+        <option value="">全ブランド</option>
+        {brands.map(b=><option key={b} value={b}>{b}</option>)}
+      </select>
+    </div>
   </div>
+  <div ref={scrollRef} style={{flex:1,overflowY:"auto",padding:IS_MOBILE?10:16}}>
   {/* Error */}
   {error&&<div style={{padding:8,background:T.red+"15",color:T.red,borderRadius:6,fontSize:11,marginBottom:8}}>{error}</div>}
   {/* Loading */}
